@@ -1,0 +1,111 @@
+# Python Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Python Cache Files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environment Variables (NEVER commit credentials)
+.env
+.env.local
+.env.*.local
+db_config.py
+!db_config.example.py
+
+# IDE/Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-project
+*.sublime-workspace
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.cover
+.hypothesis/
+
+# Database & Logs
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.log.*
+logs/
+
+# Generated Reports
+reports/*.csv
+reports/*.pdf
+reports/*.xlsx
+
+# Temporary Files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# Node modules (if using npm)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Package lock files (optional - depends on project needs)
+# pip.lock
+# poetry.lock
+
+# IDE Specific
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+.idea/
+*.iml
+
+# OS Specific
+.DS_Store
+.AppleDouble
+.LSOverride
+*.DS_Store
+Thumbs.db
+
+# Any local test data
+data/students.csv.bak
+data/courses.csv.bak
+data/enrollments.csv.bak
+data/grades.csv.bak
+data/attendance.csv.bak
+
+# Local database backups
+*.sql.bak
+*.dump
+*.backup
+
+# Misc
+.mypy_cache/
+.dmypy.json
+dmypy.json
