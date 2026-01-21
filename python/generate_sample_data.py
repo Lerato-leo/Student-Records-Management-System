@@ -18,8 +18,9 @@ from faker import Faker
 from datetime import datetime, timedelta
 import random
 
-# Initialize Faker
-fake = Faker()
+# Initialize Faker with both Zulu and English locales for mixed South African names
+fake_zu = Faker('zu_ZA')  # Zulu (South Africa)
+fake_en = Faker('en_US')  # English (fallback for mixed names)
 
 # Configuration
 OUTPUT_DIR = "../data"
@@ -55,11 +56,13 @@ ENROLLMENT_TERMS = ["1", "2"]
 
 
 def generate_students(num_students=NUM_STUDENTS):
-    """Generate student data."""
+    """Generate student data with randomly mixed Zulu and English names."""
     print(f"Generating {num_students} students...")
     
     students = []
     for i in range(1, num_students + 1):
+        # Randomly select between Zulu and English locales for each student
+        fake = random.choice([fake_zu, fake_en])
         birth_date = fake.date_of_birth(minimum_age=18, maximum_age=35)
         # Extract birth year (first 4 digits of student_number)
         birth_year = birth_date.year
@@ -116,7 +119,7 @@ def generate_enrollments(num_students, num_courses, num_enrollments=NUM_ENROLLME
         course_id = random.randint(1, num_courses)
         academic_year = f"{random.randint(2020, 2024)}-{random.randint(2020, 2024)}"  # Format: YYYY-YYYY
         term = random.choice(ENROLLMENT_TERMS)  # Now uses '1' or '2'
-        enrollment_date = fake.date_between(start_date='-365d', end_date='today')
+        enrollment_date = fake_zu.date_between(start_date='-365d', end_date='today')
         
         enrollment = {
             'enrollment_id': i,
@@ -150,7 +153,7 @@ def generate_grades(enrollments, num_grades=NUM_GRADES):
         grade_type = random.choice(GRADE_TYPES)  # Now uses lowercase values: 'test', 'assignment', 'exam'
         # Ensure grade_value is between 0 and 100 (matches SQL CHECK constraint)
         grade_value = random.randint(0, 100)
-        grade_date = fake.date_between(start_date='-365d', end_date='today')
+        grade_date = fake_zu.date_between(start_date='-365d', end_date='today')
         
         grade = {
             'grades_id': i,
@@ -180,7 +183,7 @@ def generate_attendance(enrollments, num_attendance=NUM_ATTENDANCE):
     for i in range(1, num_attendance + 1):
         # Only use enrollment IDs that exist
         enrollment_id = random.choice(valid_enrollment_ids)
-        attendance_date = fake.date_between(start_date='-365d', end_date='today')
+        attendance_date = fake_zu.date_time_between(start_date='-365d')
         # SQL allows: 'present', 'absent', 'late' (lowercase only)
         status = random.choice(ATTENDANCE_STATUS)
         
