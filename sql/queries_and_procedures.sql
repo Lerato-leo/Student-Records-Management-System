@@ -292,7 +292,7 @@ CREATE OR REPLACE PROCEDURE mark_attendance(
     OUT p_attendance_id INT,
     p_enrollment_id INT,
     p_status VARCHAR,
-    p_attendance_date DATE DEFAULT CURRENT_DATE
+    p_attendance_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 LANGUAGE plpgsql
 AS $$

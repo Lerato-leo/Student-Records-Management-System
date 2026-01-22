@@ -291,3 +291,130 @@ class ReportOperations:
             return DatabaseConnection.execute_query(query)
         except Exception as e:
             return None
+
+
+class EnrollmentOperations:
+    """Enrollment management operations"""
+    
+    @staticmethod
+    def add_enrollment(student_id, course_id, academic_year, term):
+        """Add new enrollment"""
+        try:
+            query = f"""
+                INSERT INTO enrollments (student_id, course_id, academic_year, term, enrollment_date)
+                VALUES ({student_id}, {course_id}, '{academic_year}', '{term}', CURRENT_DATE)
+                RETURNING enrollment_id;
+            """
+            result = DatabaseConnection.execute_query(query)
+            if result:
+                return True, f"Enrollment added successfully (ID: {result[0][0]})"
+            return False, "Failed to add enrollment"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+    
+    @staticmethod
+    def get_all_enrollments():
+        """Get all enrollments"""
+        try:
+            query = """
+                SELECT enrollment_id, student_id, course_id, academic_year, term, enrollment_date
+                FROM enrollments
+                ORDER BY enrollment_id
+            """
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return []
+    
+    @staticmethod
+    def get_enrollment_by_id(enrollment_id):
+        """Get enrollment by ID"""
+        try:
+            query = f"""
+                SELECT enrollment_id, student_id, course_id, academic_year, term, enrollment_date
+                FROM enrollments
+                WHERE enrollment_id = {enrollment_id}
+            """
+            result = DatabaseConnection.execute_query(query)
+            return result[0] if result else None
+        except Exception as e:
+            return None
+
+
+class GradeOperations:
+    """Grade management operations"""
+    
+    @staticmethod
+    def add_grade(enrollment_id, grade_type, grade_value):
+        """Add grade"""
+        try:
+            query = f"""
+                INSERT INTO grades (enrollment_id, grade_type, grade_value, grade_date)
+                VALUES ({enrollment_id}, '{grade_type}', {grade_value}, CURRENT_DATE)
+                RETURNING grades_id;
+            """
+            result = DatabaseConnection.execute_query(query)
+            if result:
+                return True, f"Grade added successfully"
+            return False, "Failed to add grade"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+    
+    @staticmethod
+    def get_all_grades():
+        """Get all grades"""
+        try:
+            query = """
+                SELECT grades_id, enrollment_id, grade_type, grade_value, grade_date
+                FROM grades
+                ORDER BY grades_id
+            """
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return []
+    
+    @staticmethod
+    def get_grade_by_id(grade_id):
+        """Get grade by ID"""
+        try:
+            query = f"""
+                SELECT grades_id, enrollment_id, grade_type, grade_value, grade_date
+                FROM grades
+                WHERE grades_id = {grade_id}
+            """
+            result = DatabaseConnection.execute_query(query)
+            return result[0] if result else None
+        except Exception as e:
+            return None
+
+
+class AttendanceOperations:
+    """Attendance management operations"""
+    
+    @staticmethod
+    def mark_attendance(enrollment_id, status):
+        """Mark attendance"""
+        try:
+            query = f"""
+                INSERT INTO attendance (enrollment_id, attendance_date, status)
+                VALUES ({enrollment_id}, CURRENT_DATE, '{status}')
+                RETURNING attendance_id;
+            """
+            result = DatabaseConnection.execute_query(query)
+            if result:
+                return True, f"Attendance marked as '{status}'"
+            return False, "Failed to mark attendance"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+    
+    @staticmethod
+    def get_all_attendance():
+        """Get all attendance records"""
+        try:
+            query = """
+                SELECT attendance_id, enrollment_id, attendance_date, status
+                FROM attendance
+                ORDER BY attendance_id
+            """
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return []
