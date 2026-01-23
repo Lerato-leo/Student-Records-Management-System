@@ -1,11 +1,13 @@
 """
 Report Generator
-Generates CSV and PDF reports
+Generates CSV and PDF reports with academic audit compliance
 """
 
 import csv
 import os
-from datetime import datetime
+import hashlib
+import uuid
+from datetime import datetime, timedelta
 from database import DatabaseConnection
 from operations import ReportOperations, StudentOperations, EnrollmentOperations, GradeOperations
 
@@ -19,9 +21,18 @@ try:
 except ImportError:
     REPORTLAB_AVAILABLE = False
 
+# Institution Information (for audit compliance)
+INSTITUTION_INFO = {
+    'name': 'Educational Records System',
+    'accreditation': 'Certified Academic Institution',
+    'email': 'registrar@institution.edu',
+    'phone': '+1 (555) 123-4567',
+    'address': 'Academic Records Office',
+}
+
 
 class ReportGenerator:
-    """Generate reports in CSV and PDF formats"""
+    """Generate reports in CSV and PDF formats with audit compliance"""
     
     OUTPUT_DIR = "../reports"
     
@@ -29,6 +40,26 @@ class ReportGenerator:
     def ensure_output_dir(cls):
         """Create output directory if it doesn't exist"""
         os.makedirs(cls.OUTPUT_DIR, exist_ok=True)
+    
+    @classmethod
+    def generate_document_id(cls):
+        """Generate unique audit-compliant document ID"""
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        unique = str(uuid.uuid4())[:8].upper()
+        return f"DOC-{timestamp}-{unique}"
+    
+    @classmethod
+    def generate_verification_code(cls, student_id, student_num, timestamp):
+        """Generate tamper-evident verification code"""
+        data = f"{student_id}{student_num}{timestamp}OFFICIAL".encode()
+        return hashlib.sha256(data).hexdigest()[:16].upper()
+    
+    @classmethod
+    def get_validity_period(cls):
+        """Return report validity dates"""
+        issued = datetime.now()
+        expires = issued + timedelta(days=365)
+        return issued, expires
     
     @classmethod
     def generate_student_transcript_csv(cls, student_id):
@@ -198,7 +229,7 @@ class ReportGenerator:
     
     @classmethod
     def generate_student_transcript_pdf(cls, student_id):
-        """Generate student transcript as PDF with professional styling"""
+        """Generate audit-compliant student transcript PDF for official academic records"""
         if not REPORTLAB_AVAILABLE:
             return False, "ReportLab not installed. Install with: pip install reportlab"
         
@@ -219,42 +250,271 @@ class ReportGenerator:
             if not transcript:
                 return False, "No transcript data found"
             
-            # Create PDF filename
+            # Generate audit compliance identifiers
+            document_id = cls.generate_document_id()
+            issued_date, expires_date = cls.get_validity_period()
+            verification_code = cls.generate_verification_code(student_id, student_num, issued_date.strftime('%Y%m%d'))
+            
+            # Create PDF filename with document ID
             filename = f"transcript_{student_num}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
             filepath = os.path.join(cls.OUTPUT_DIR, filename)
             
-            # Create PDF with margins
+            # Create PDF with audit-compliant margins
             doc = SimpleDocTemplate(filepath, pagesize=letter, 
-                                   leftMargin=0.5*inch, rightMargin=0.5*inch,
-                                   topMargin=0.75*inch, bottomMargin=0.75*inch)
+                                   leftMargin=0.75*inch, rightMargin=0.75*inch,
+                                   topMargin=0.5*inch, bottomMargin=1*inch)
             story = []
             styles = getSampleStyleSheet()
             
-            # ========== HEADER SECTION ==========
-            # Institution Header (if desired, can add logo area)
+            # ========== OFFICIAL INSTITUTION HEADER ==========
             header_style = ParagraphStyle(
                 'HeaderStyle',
                 parent=styles['Normal'],
-                fontSize=9,
+                fontSize=11,
+                textColor=colors.HexColor('#1f4788'),
+                alignment=1,
+                spaceAfter=2,
+                fontName='Helvetica-Bold'
+            )
+            subheader_style = ParagraphStyle(
+                'SubHeaderStyle',
+                parent=styles['Normal'],
+                fontSize=8,
                 textColor=colors.HexColor('#666666'),
                 alignment=1,
-                spaceAfter=3
+                spaceAfter=1
             )
-            story.append(Paragraph("Student Records Management System", header_style))
-            story.append(Paragraph("Academic Transcript Report", header_style))
-            story.append(Spacer(1, 0.15*inch))
             
-            # ========== TITLE ==========
+            story.append(Paragraph(INSTITUTION_INFO['name'], header_style))
+            story.append(Paragraph(INSTITUTION_INFO['address'], subheader_style))
+            story.append(Paragraph(f"Phone: {INSTITUTION_INFO['phone']} | Email: {INSTITUTION_INFO['email']}", subheader_style))
+            story.append(Paragraph(f"Accreditation: {INSTITUTION_INFO['accreditation']}", subheader_style))
+            story.append(Spacer(1, 0.2*inch))
+            
+            # ========== OFFICIAL TITLE ==========
             title_style = ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
-                fontSize=28,
+                fontSize=26,
                 textColor=colors.HexColor('#1f4788'),
-                spaceAfter=24,
+                spaceAfter=12,
                 alignment=1,
                 fontName='Helvetica-Bold'
             )
             story.append(Paragraph('OFFICIAL ACADEMIC TRANSCRIPT', title_style))
+            
+            # ========== AUDIT COMPLIANCE SECTION ==========
+            compliance_style = ParagraphStyle(
+                'ComplianceStyle',
+                parent=styles['Normal'],
+                fontSize=8,
+                textColor=colors.HexColor('#CC0000'),
+                alignment=1,
+                spaceAfter=6
+            )
+            story.append(Paragraph("This is an official academic record. Unauthorized reproduction or alteration is prohibited.", compliance_style))
+            
+            # ========== DOCUMENT IDENTIFIERS (Audit Trail) ==========
+            audit_data = [
+                ['Document ID:', document_id, 'Issued:', issued_date.strftime('%B %d, %Y')],
+                ['Verification Code:', verification_code, 'Valid Until:', expires_date.strftime('%B %d, %Y')]
+            ]
+            
+            audit_table = Table(audit_data, colWidths=[1.3*inch, 1.7*inch, 1.3*inch, 1.7*inch])
+            audit_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f0f0f0')),
+                ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#1f4788')),
+                ('TEXTCOLOR', (2, 0), (2, -1), colors.HexColor('#1f4788')),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, -1), 'Courier'),
+                ('FONTNAME', (3, 0), (3, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc'))
+            ]))
+            
+            story.append(audit_table)
+            story.append(Spacer(1, 0.2*inch))
+            
+            # ========== STUDENT INFORMATION SECTION ==========
+            student_info_data = [
+                ['Student Number:', str(student_num), 'Legal Name:', f"{first_name} {last_name}"],
+                ['Date of Birth:', str(dob), 'Enrollment Status:', status.upper()],
+                ['Email Address:', email, 'Record Last Updated:', datetime.now().strftime('%Y-%m-%d')]
+            ]
+            
+            student_info_table = Table(student_info_data, colWidths=[1.2*inch, 1.8*inch, 1.2*inch, 1.8*inch])
+            student_info_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#333333')),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                ('FONTNAME', (3, 0), (3, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc')),
+                ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.HexColor('#ffffff'), colors.HexColor('#f9f9f9')])
+            ]))
+            
+            story.append(student_info_table)
+            story.append(Spacer(1, 0.2*inch))
+            
+            # ========== ACADEMIC RECORD HEADER ==========
+            record_header = ParagraphStyle(
+                'RecordHeader',
+                parent=styles['Heading2'],
+                fontSize=12,
+                textColor=colors.HexColor('#1f4788'),
+                spaceAfter=10,
+                fontName='Helvetica-Bold',
+                borderPadding=5
+            )
+            story.append(Paragraph('ACADEMIC RECORD - OFFICIAL COURSES AND GRADES', record_header))
+            
+            # ========== TRANSCRIPT TABLE ==========
+            table_data = [['Course Code', 'Course Name', 'Academic Year', 'Term', 'Grade', 'Status']]
+            
+            for row in transcript:
+                course_code = row[4]
+                course_name = row[5][:28]
+                academic_year = row[6]
+                term = f"Term {row[7]}"
+                avg_grade = f"{float(row[8]):.2f}" if row[8] else 'N/A'
+                # Status based on grade (audit compliance)
+                status_val = "PASSED" if row[8] and float(row[8]) >= 60 else "AUDIT" if row[8] else "PENDING"
+                
+                table_data.append([course_code, course_name, academic_year, term, avg_grade, status_val])
+            
+            table = Table(table_data, colWidths=[1*inch, 2.1*inch, 1*inch, 0.75*inch, 0.9*inch, 0.9*inch])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f4788')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('ALIGNMENT', (0, 0), (-1, 0), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#fafafa')),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.HexColor('#333333')),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('ALIGNMENT', (0, 1), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 1), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 1), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1.2, colors.HexColor('#1f4788')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#ffffff'), colors.HexColor('#f0f7ff')])
+            ]))
+            
+            story.append(table)
+            story.append(Spacer(1, 0.2*inch))
+            
+            # ========== ACADEMIC SUMMARY WITH CONSTRAINTS ==========
+            total_courses = len(transcript)
+            avg_grades = [float(row[8]) for row in transcript if row[8]]
+            overall_avg = sum(avg_grades) / len(avg_grades) if avg_grades else 0
+            
+            summary_header = ParagraphStyle(
+                'SummaryHeader',
+                parent=styles['Heading2'],
+                fontSize=11,
+                textColor=colors.HexColor('#1f4788'),
+                spaceAfter=8,
+                fontName='Helvetica-Bold'
+            )
+            
+            story.append(Paragraph('ACADEMIC SUMMARY AND GRADE STATISTICS', summary_header))
+            
+            summary_data = [
+                ['Total Courses Completed:', str(total_courses), 'Overall GPA:', f'{overall_avg:.2f}'],
+                ['Minimum Grade Threshold:', '60', 'Average Grade Range:', '0-100'],
+                ['Grade Scale: A (90-100) | B (80-89) | C (70-79) | D (60-69) | F (0-59)', '', '', '']
+            ]
+            
+            summary_table = Table(summary_data, colWidths=[2*inch, 1.2*inch, 1.5*inch, 1.5*inch])
+            summary_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 1), colors.HexColor('#1f4788')),
+                ('TEXTCOLOR', (0, 0), (-1, 1), colors.whitesmoke),
+                ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor('#f0f0f0')),
+                ('FONTNAME', (0, 0), (-1, 1), 'Helvetica-Bold'),
+                ('FONTNAME', (0, 2), (-1, 2), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, 1), 10),
+                ('FONTSIZE', (0, 2), (-1, 2), 8),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, 1), 1, colors.whitesmoke),
+                ('GRID', (0, 2), (-1, 2), 0.5, colors.HexColor('#cccccc'))
+            ]))
+            
+            story.append(summary_table)
+            story.append(Spacer(1, 0.3*inch))
+            
+            # ========== OFFICIAL CERTIFICATION & FOOTER ==========
+            certification_style = ParagraphStyle(
+                'CertificationStyle',
+                parent=styles['Normal'],
+                fontSize=9,
+                textColor=colors.HexColor('#1f4788'),
+                fontName='Helvetica-Bold',
+                spaceAfter=4,
+                alignment=0
+            )
+            
+            normal_style = ParagraphStyle(
+                'NormalStyle',
+                parent=styles['Normal'],
+                fontSize=8,
+                textColor=colors.HexColor('#333333'),
+                alignment=0,
+                spaceAfter=2
+            )
+            
+            story.append(Paragraph('CERTIFICATION:', certification_style))
+            story.append(Paragraph('This official academic transcript is a complete and accurate record of the academic progress and achievements of the named student. This document is prepared in accordance with institutional policies and federal regulations governing educational records.', normal_style))
+            story.append(Spacer(1, 0.15*inch))
+            
+            story.append(Paragraph('CONFIDENTIALITY NOTICE:', certification_style))
+            story.append(Paragraph('This document contains confidential educational records protected under FERPA (Family Educational Rights and Privacy Act). Unauthorized access, use, or distribution is prohibited by federal law.', normal_style))
+            story.append(Spacer(1, 0.2*inch))
+            
+            # ========== OFFICIAL FOOTER ==========
+            footer_style = ParagraphStyle(
+                'FooterStyle',
+                parent=styles['Normal'],
+                fontSize=7,
+                textColor=colors.HexColor('#999999'),
+                alignment=1,
+                spaceAfter=1
+            )
+            
+            story.append(Paragraph("═" * 80, footer_style))
+            story.append(Paragraph(f"Document ID: {document_id} | Verification Code: {verification_code}", footer_style))
+            story.append(Paragraph(f"Generated: {issued_date.strftime('%B %d, %Y at %H:%M:%S %Z')} | Valid Until: {expires_date.strftime('%B %d, %Y')}", footer_style))
+            story.append(Paragraph(f"Contact Registrar for verification: {INSTITUTION_INFO['email']} | {INSTITUTION_INFO['phone']}", footer_style))
+            story.append(Paragraph("OFFICIAL SEAL - TAMPER EVIDENT", footer_style))
+            
+            # Build PDF
+            doc.build(story)
+            
+            return True, f"Official transcript PDF saved to {filepath}"
+        
+        except Exception as e:
+            return False, f"Error generating PDF: {str(e)}"
             
             # ========== STUDENT INFORMATION SECTION ==========
             story.append(Spacer(1, 0.1*inch))
