@@ -719,12 +719,14 @@ class StudentRecordsApp:
                 '1': 'Student Transcript (View)',
                 '2': 'Course Grade Statistics',
                 '3': 'Enrollment Statistics',
-                '4': 'Top Students by GPA',
-                '5': 'Low Attendance Report',
-                '6': 'Export All Reports to CSV',
-                '7': 'Student Transcript as PDF ⭐',
-                '8': 'Course Statistics as PDF ⭐',
-                '9': 'Top Students as PDF ⭐'
+                '4': 'Top Students by Weighted GPA',
+                '5': 'Student Course Results (Weighted)',
+                '6': 'Student GPA Breakdown',
+                '7': 'Low Attendance Report',
+                '8': 'Export All Reports to CSV',
+                '9': 'Student Transcript as PDF ⭐',
+                '10': 'Course Statistics as PDF ⭐',
+                '11': 'Top Students as PDF ⭐'
             }
             self.print_menu("REPORTS", options)
             
@@ -739,16 +741,20 @@ class StudentRecordsApp:
             elif choice == '3':
                 self.report_enrollment_stats()
             elif choice == '4':
-                self.report_top_students()
+                self.report_top_students_weighted_gpa()
             elif choice == '5':
-                self.report_low_attendance()
+                self.report_course_results_weighted()
             elif choice == '6':
-                self.export_all_reports()
+                self.report_student_gpa_breakdown()
             elif choice == '7':
-                self.export_transcript_pdf()
+                self.report_low_attendance()
             elif choice == '8':
-                self.export_course_stats_pdf()
+                self.export_all_reports()
             elif choice == '9':
+                self.export_transcript_pdf()
+            elif choice == '10':
+                self.export_course_stats_pdf()
+            elif choice == '11':
                 self.export_top_students_pdf()
             else:
                 print("❌ Invalid option")
@@ -830,36 +836,103 @@ class StudentRecordsApp:
         except Exception as e:
             print(f"  ❌ Error: {e}\n")
     
-    def report_top_students(self):
-        """Top students by GPA"""
-        self.print_header("TOP STUDENTS BY GPA")
+    def report_top_students_weighted_gpa(self):
+        """Top students by weighted GPA"""
+        self.print_header("TOP STUDENTS BY WEIGHTED GPA")
+        print("  Weights: Assignment 30% | Test 30% | Exam 40%\n")
         
         try:
             query = """
-                SELECT 
-                    ROW_NUMBER() OVER (ORDER BY AVG(g.grade_value) DESC) AS rank,
-                    s.student_number,
-                    s.first_name,
-                    s.last_name,
-                    ROUND(AVG(g.grade_value)::NUMERIC, 2) AS gpa,
-                    COUNT(g.grades_id) AS total_grades
-                FROM students s
-                LEFT JOIN enrollments e ON s.student_id = e.student_id
-                LEFT JOIN grades g ON e.enrollment_id = g.enrollment_id
-                WHERE s.status = 'active' AND g.grades_id IS NOT NULL
-                GROUP BY s.student_id, s.student_number, s.first_name, s.last_name
+                SELECT
+                    ROW_NUMBER() OVER (ORDER BY gpa DESC) AS rank,
+                    student_number,
+                    first_name,
+                    last_name,
+                    gpa
+                FROM vw_student_gpa
                 ORDER BY gpa DESC
                 LIMIT 10;
             """
             result = DatabaseConnection.execute_query(query)
             
             if result:
-                headers = ["Rank", "Num", "First", "Last", "GPA", "Total Grades"]
+                headers = ["Rank", "Student #", "First Name", "Last Name", "Weighted GPA"]
                 self.print_table(headers, result)
             else:
                 print("  ❌ No data found\n")
         except Exception as e:
             print(f"  ❌ Error: {e}\n")
+    
+    def report_course_results_weighted(self):
+        """View course results with weighted averages"""
+        self.print_header("STUDENT COURSE RESULTS (WEIGHTED)")
+        print("  Weights: Assignment 30% | Test 30% | Exam 40%\n")
+        
+        try:
+            query = """
+                SELECT 
+                    student_number,
+                    first_name,
+                    last_name,
+                    course_code,
+                    course_name,
+                    academic_year,
+                    term,
+                    final_average
+                FROM vw_student_course_results
+                ORDER BY student_number, course_code;
+            """
+            result = DatabaseConnection.execute_query(query)
+            
+            if result:
+                headers = ["Num", "First", "Last", "Code", "Course", "Year", "Term", "Final Avg"]
+                self.print_table(headers, result)
+            else:
+                print("  ❌ No data found\n")
+        except Exception as e:
+            print(f"  ❌ Error: {e}\n")
+    
+    def report_student_gpa_breakdown(self):
+        """View student GPA with course breakdown"""
+        self.print_header("STUDENT GPA BREAKDOWN")
+        print("  Weights: Assignment 30% | Test 30% | Exam 40%\n")
+        
+        student_id = self.get_input("  Enter Student ID: ", int)
+        
+        try:
+            # Get student GPA
+            gpa_query = f"SELECT * FROM vw_student_gpa WHERE student_id = {student_id};"
+            gpa_result = DatabaseConnection.execute_query(gpa_query)
+            
+            if gpa_result:
+                print(f"\n  Student: {gpa_result[0][1]} ({gpa_result[0][2]} {gpa_result[0][3]})")
+                print(f"  Overall GPA: {gpa_result[0][4]}\n")
+                
+                # Get course breakdown
+                course_query = f"""
+                    SELECT 
+                        course_code,
+                        course_name,
+                        final_average
+                    FROM vw_student_course_results
+                    WHERE student_id = {student_id}
+                    ORDER BY course_code;
+                """
+                course_result = DatabaseConnection.execute_query(course_query)
+                
+                if course_result:
+                    headers = ["Code", "Course Name", "Final Average"]
+                    self.print_table(headers, course_result)
+                else:
+                    print("  No course data found\n")
+            else:
+                print("  ❌ Student not found\n")
+        except Exception as e:
+            print(f"  ❌ Error: {e}\n")
+    
+    def report_top_students(self):
+        """Top students by GPA (Legacy - calls weighted version)"""
+        self.report_top_students_weighted_gpa()
     
     def report_low_attendance(self):
         """Low attendance report"""
@@ -998,14 +1071,22 @@ class StudentRecordsApp:
      • Add, View (paginated), Search, Delete grades
      • Mark attendance with status (present/absent/late)
      • View attendance reports with statistics
+     • Weighted GPA System: Assignment 30% | Test 30% | Exam 40%
      
-  ✅ REPORTS
+  ✅ REPORTS (NEW WEIGHTED GPA FEATURES)
      • Student Transcripts (from vw_student_transcripts view)
      • Course Grade Statistics (aggregated data)
      • Enrollment Statistics
-     • Top Students by GPA (ranked)
+     • ⭐ Top Students by Weighted GPA (ranked by weighted average)
+     • ⭐ Student Course Results (showing weighted final average)
+     • ⭐ Student GPA Breakdown (per-course breakdown)
      • Low Attendance Report (< 75%)
      • Export all reports to CSV
+  
+  📊 WEIGHTED GPA CALCULATION
+     • Formula: (Assignment × 0.30) + (Test × 0.30) + (Exam × 0.40)
+     • Ensures comprehensive assessment of student performance
+     • Views: vw_student_gpa, vw_student_course_results
   
   🔒 SAFETY FEATURES
      • Confirmation prompts for all deletions
