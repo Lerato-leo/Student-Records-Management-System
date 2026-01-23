@@ -716,12 +716,15 @@ class StudentRecordsApp:
         """Reports menu"""
         while True:
             options = {
-                '1': 'Student Transcript',
+                '1': 'Student Transcript (View)',
                 '2': 'Course Grade Statistics',
                 '3': 'Enrollment Statistics',
                 '4': 'Top Students by GPA',
                 '5': 'Low Attendance Report',
-                '6': 'Export All Reports to CSV'
+                '6': 'Export All Reports to CSV',
+                '7': 'Student Transcript as PDF ⭐',
+                '8': 'Course Statistics as PDF ⭐',
+                '9': 'Top Students as PDF ⭐'
             }
             self.print_menu("REPORTS", options)
             
@@ -741,6 +744,12 @@ class StudentRecordsApp:
                 self.report_low_attendance()
             elif choice == '6':
                 self.export_all_reports()
+            elif choice == '7':
+                self.export_transcript_pdf()
+            elif choice == '8':
+                self.export_course_stats_pdf()
+            elif choice == '9':
+                self.export_top_students_pdf()
             else:
                 print("❌ Invalid option")
             
@@ -896,6 +905,40 @@ class StudentRecordsApp:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             ReportGenerator.generate_all_reports(timestamp)
             print(f"  ✅ Reports exported to reports/ directory\n")
+        except Exception as e:
+            print(f"  ❌ Error: {e}\n")
+    
+    def export_transcript_pdf(self):
+        """Export student transcript as PDF"""
+        self.print_header("EXPORT STUDENT TRANSCRIPT AS PDF")
+        
+        student_id = self.get_input("  Student ID: ", int)
+        
+        try:
+            success, message = ReportGenerator.generate_student_transcript_pdf(student_id)
+            print(f"  {'✅' if success else '❌'} {message}\n")
+        except Exception as e:
+            print(f"  ❌ Error: {e}\n")
+    
+    def export_course_stats_pdf(self):
+        """Export course statistics as PDF"""
+        self.print_header("EXPORT COURSE STATISTICS AS PDF")
+        
+        try:
+            success, message = ReportGenerator.generate_course_statistics_pdf()
+            print(f"  {'✅' if success else '❌'} {message}\n")
+        except Exception as e:
+            print(f"  ❌ Error: {e}\n")
+    
+    def export_top_students_pdf(self):
+        """Export top students as PDF"""
+        self.print_header("EXPORT TOP STUDENTS AS PDF")
+        
+        limit = self.get_input("  Number of top students (default 10): ", int) or 10
+        
+        try:
+            success, message = ReportGenerator.generate_top_students_pdf(limit)
+            print(f"  {'✅' if success else '❌'} {message}\n")
         except Exception as e:
             print(f"  ❌ Error: {e}\n")
     
