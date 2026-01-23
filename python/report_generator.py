@@ -198,7 +198,7 @@ class ReportGenerator:
     
     @classmethod
     def generate_student_transcript_pdf(cls, student_id):
-        """Generate student transcript as PDF"""
+        """Generate student transcript as PDF with professional styling"""
         if not REPORTLAB_AVAILABLE:
             return False, "ReportLab not installed. Install with: pip install reportlab"
         
@@ -223,84 +223,169 @@ class ReportGenerator:
             filename = f"transcript_{student_num}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
             filepath = os.path.join(cls.OUTPUT_DIR, filename)
             
-            # Create PDF
-            doc = SimpleDocTemplate(filepath, pagesize=letter)
+            # Create PDF with margins
+            doc = SimpleDocTemplate(filepath, pagesize=letter, 
+                                   leftMargin=0.5*inch, rightMargin=0.5*inch,
+                                   topMargin=0.75*inch, bottomMargin=0.75*inch)
             story = []
             styles = getSampleStyleSheet()
             
-            # Title
+            # ========== HEADER SECTION ==========
+            # Institution Header (if desired, can add logo area)
+            header_style = ParagraphStyle(
+                'HeaderStyle',
+                parent=styles['Normal'],
+                fontSize=9,
+                textColor=colors.HexColor('#666666'),
+                alignment=1,
+                spaceAfter=3
+            )
+            story.append(Paragraph("Student Records Management System", header_style))
+            story.append(Paragraph("Academic Transcript Report", header_style))
+            story.append(Spacer(1, 0.15*inch))
+            
+            # ========== TITLE ==========
             title_style = ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
-                fontSize=24,
+                fontSize=28,
                 textColor=colors.HexColor('#1f4788'),
-                spaceAfter=30,
-                alignment=1
+                spaceAfter=24,
+                alignment=1,
+                fontName='Helvetica-Bold'
             )
-            story.append(Paragraph('STUDENT TRANSCRIPT', title_style))
-            story.append(Spacer(1, 0.2*inch))
+            story.append(Paragraph('OFFICIAL ACADEMIC TRANSCRIPT', title_style))
             
-            # Student Information Section
-            student_info_style = ParagraphStyle(
-                'StudentInfo',
-                parent=styles['Normal'],
-                fontSize=11,
-                spaceAfter=6
+            # ========== STUDENT INFORMATION SECTION ==========
+            story.append(Spacer(1, 0.1*inch))
+            
+            # Student info in a professional box style
+            student_info_data = [
+                ['Student Number:', str(student_num), 'Email:', email],
+                ['Full Name:', f"{first_name} {last_name}", 'Status:', status.upper()],
+                ['Date of Birth:', str(dob), 'Generated:', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+            ]
+            
+            student_info_table = Table(student_info_data, colWidths=[1.2*inch, 1.8*inch, 1*inch, 1.8*inch])
+            student_info_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#333333')),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc')),
+                ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.HexColor('#ffffff'), colors.HexColor('#f9f9f9')])
+            ]))
+            
+            story.append(student_info_table)
+            story.append(Spacer(1, 0.25*inch))
+            
+            # ========== TRANSCRIPT SECTION HEADER ==========
+            transcript_header_style = ParagraphStyle(
+                'TranscriptHeader',
+                parent=styles['Heading2'],
+                fontSize=14,
+                textColor=colors.HexColor('#1f4788'),
+                spaceAfter=12,
+                fontName='Helvetica-Bold',
+                borderPadding=5
             )
+            story.append(Paragraph('Academic Record', transcript_header_style))
             
-            story.append(Paragraph(f"<b>Student Number:</b> {student_num}", student_info_style))
-            story.append(Paragraph(f"<b>Name:</b> {first_name} {last_name}", student_info_style))
-            story.append(Paragraph(f"<b>Email:</b> {email}", student_info_style))
-            story.append(Paragraph(f"<b>Status:</b> {status}", student_info_style))
-            story.append(Paragraph(f"<b>Generated:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", student_info_style))
-            story.append(Spacer(1, 0.3*inch))
-            
-            # Transcript Table
+            # ========== TRANSCRIPT TABLE ==========
             table_data = [['Course Code', 'Course Name', 'Academic Year', 'Term', 'Average Grade']]
             
             for row in transcript:
                 # row format: student_id, student_num, first_name, last_name, course_code, course_name, academic_year, term, avg_grade
                 course_code = row[4]
-                course_name = row[5]
+                course_name = row[5][:30]  # Truncate long names
                 academic_year = row[6]
-                term = row[7]
-                avg_grade = str(row[8]) if row[8] else 'N/A'
+                term = f"Term {row[7]}"
+                avg_grade = f"{float(row[8]):.2f}" if row[8] else 'N/A'
                 
                 table_data.append([course_code, course_name, academic_year, term, avg_grade])
             
-            # Create table with styling
-            table = Table(table_data, colWidths=[1.2*inch, 2*inch, 1.2*inch, 0.6*inch, 1*inch])
+            # Create table with enhanced styling
+            table = Table(table_data, colWidths=[1.1*inch, 2.2*inch, 1*inch, 0.8*inch, 1.2*inch])
             table.setStyle(TableStyle([
+                # Header styling
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f4788')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('ALIGNMENT', (0, 0), (-1, 0), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, 0), 12),
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                # Data rows styling
+                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#fafafa')),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.HexColor('#333333')),
                 ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
                 ('FONTSIZE', (0, 1), (-1, -1), 10),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
+                ('ALIGNMENT', (0, 1), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 1), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 1), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
+                # Grid styling
+                ('GRID', (0, 0), (-1, -1), 1.2, colors.HexColor('#1f4788')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#ffffff'), colors.HexColor('#f0f7ff')])
             ]))
             
             story.append(table)
-            story.append(Spacer(1, 0.3*inch))
+            story.append(Spacer(1, 0.25*inch))
             
-            # Summary
+            # ========== SUMMARY SECTION ==========
             total_courses = len(transcript)
             avg_grades = [float(row[8]) for row in transcript if row[8]]
             overall_avg = sum(avg_grades) / len(avg_grades) if avg_grades else 0
             
+            # Summary box
             summary_style = ParagraphStyle(
-                'Summary',
+                'SummaryStyle',
                 parent=styles['Normal'],
-                fontSize=11,
-                textColor=colors.HexColor('#1f4788'),
-                fontName='Helvetica-Bold'
+                fontSize=10,
+                fontName='Helvetica-Bold',
+                textColor=colors.HexColor('#1f4788')
             )
             
-            story.append(Paragraph(f"<b>Summary:</b> Total Courses: {total_courses} | Overall Average: {overall_avg:.2f}", summary_style))
+            summary_data = [
+                ['Total Courses:', str(total_courses), 'Overall Average:', f'{overall_avg:.2f}']
+            ]
+            
+            summary_table = Table(summary_data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+            summary_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#1f4788')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.whitesmoke),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 11),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                ('GRID', (0, 0), (-1, -1), 1, colors.whitesmoke)
+            ]))
+            
+            story.append(summary_table)
+            story.append(Spacer(1, 0.3*inch))
+            
+            # ========== FOOTER ==========
+            footer_style = ParagraphStyle(
+                'FooterStyle',
+                parent=styles['Normal'],
+                fontSize=8,
+                textColor=colors.HexColor('#999999'),
+                alignment=1,
+                spaceAfter=0
+            )
+            story.append(Spacer(1, 0.1*inch))
+            story.append(Paragraph("This is an official academic record. For official use only.", footer_style))
+            story.append(Paragraph(f"Generated on {datetime.now().strftime('%B %d, %Y at %H:%M:%S')}", footer_style))
             
             # Build PDF
             doc.build(story)
@@ -312,7 +397,7 @@ class ReportGenerator:
     
     @classmethod
     def generate_course_statistics_pdf(cls):
-        """Generate course grade statistics as PDF"""
+        """Generate course grade statistics as PDF with professional styling"""
         if not REPORTLAB_AVAILABLE:
             return False, "ReportLab not installed"
         
@@ -344,53 +429,143 @@ class ReportGenerator:
             filename = f"course_statistics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
             filepath = os.path.join(cls.OUTPUT_DIR, filename)
             
-            doc = SimpleDocTemplate(filepath, pagesize=letter)
+            # Create PDF with margins
+            doc = SimpleDocTemplate(filepath, pagesize=letter,
+                                   leftMargin=0.5*inch, rightMargin=0.5*inch,
+                                   topMargin=0.75*inch, bottomMargin=0.75*inch)
             story = []
             styles = getSampleStyleSheet()
             
-            # Title
+            # ========== HEADER ==========
+            header_style = ParagraphStyle(
+                'HeaderStyle',
+                parent=styles['Normal'],
+                fontSize=9,
+                textColor=colors.HexColor('#666666'),
+                alignment=1,
+                spaceAfter=3
+            )
+            story.append(Paragraph("Student Records Management System", header_style))
+            story.append(Paragraph("Course Performance & Statistics Report", header_style))
+            story.append(Spacer(1, 0.15*inch))
+            
+            # ========== TITLE ==========
             title_style = ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
-                fontSize=24,
+                fontSize=26,
                 textColor=colors.HexColor('#1f4788'),
-                spaceAfter=30,
-                alignment=1
+                spaceAfter=20,
+                alignment=1,
+                fontName='Helvetica-Bold'
             )
-            story.append(Paragraph('COURSE GRADE STATISTICS', title_style))
-            story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
-            story.append(Spacer(1, 0.2*inch))
+            story.append(Paragraph('COURSE STATISTICS REPORT', title_style))
             
-            # Statistics Table
-            table_data = [['Course Code', 'Course Name', 'Students', 'Grades', 'Avg Grade', 'High', 'Low']]
+            # ========== REPORT INFO ==========
+            info_style = ParagraphStyle(
+                'InfoStyle',
+                parent=styles['Normal'],
+                fontSize=9,
+                textColor=colors.HexColor('#666666'),
+                alignment=1,
+                spaceAfter=12
+            )
+            story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y at %H:%M:%S')}", info_style))
+            story.append(Paragraph(f"Total Courses: {len(stats)}", info_style))
+            story.append(Spacer(1, 0.15*inch))
+            
+            # ========== STATISTICS TABLE ==========
+            table_data = [['Code', 'Course Name', 'Students', 'Grades', 'Avg Grade', 'Highest', 'Lowest']]
             
             for row in stats:
                 table_data.append([
                     str(row[0]),
-                    str(row[1])[:20],
-                    str(row[2]),
-                    str(row[3]),
-                    str(row[4]),
-                    str(row[5]) if row[5] else 'N/A',
-                    str(row[6]) if row[6] else 'N/A'
+                    str(row[1])[:26],
+                    str(int(row[2] or 0)),
+                    str(int(row[3] or 0)),
+                    f"{float(row[4] or 0):.2f}",
+                    f"{float(row[5] or 0):.2f}",
+                    f"{float(row[6] or 0):.2f}"
                 ])
             
-            table = Table(table_data, colWidths=[1*inch, 1.8*inch, 0.8*inch, 0.8*inch, 0.9*inch, 0.7*inch, 0.7*inch])
+            table = Table(table_data, colWidths=[0.9*inch, 2.2*inch, 0.9*inch, 0.85*inch, 1*inch, 0.95*inch, 0.85*inch])
             table.setStyle(TableStyle([
+                # Header
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f4788')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 11),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('ALIGNMENT', (0, 0), (-1, 0), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                # Data rows
+                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#fafafa')),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.HexColor('#333333')),
                 ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
                 ('FONTSIZE', (0, 1), (-1, -1), 9),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
+                ('ALIGNMENT', (0, 1), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 1), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 1), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1.2, colors.HexColor('#1f4788')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#ffffff'), colors.HexColor('#f0f7ff')])
             ]))
             
             story.append(table)
+            story.append(Spacer(1, 0.25*inch))
+            
+            # ========== SUMMARY STATISTICS ==========
+            total_students = sum([int(s[2] or 0) for s in stats])
+            total_grades = sum([int(s[3] or 0) for s in stats])
+            overall_avg = sum([float(s[4] or 0) for s in stats]) / len([s for s in stats if s[4]]) if any(s[4] for s in stats) else 0
+            highest_overall = max([float(s[5] or 0) for s in stats]) if stats else 0
+            lowest_overall = min([float(s[6] or 0) for s in stats if s[6]]) if any(s[6] for s in stats) else 0
+            
+            summary_header = ParagraphStyle(
+                'SummaryHeader',
+                parent=styles['Heading2'],
+                fontSize=12,
+                textColor=colors.HexColor('#1f4788'),
+                spaceAfter=10,
+                fontName='Helvetica-Bold'
+            )
+            
+            story.append(Paragraph('Overall Statistics', summary_header))
+            
+            summary_data = [
+                ['Total Students:', str(total_students), 'Total Grades:', str(total_grades)],
+                ['Overall Average:', f'{overall_avg:.2f}', 'Class High/Low:', f'{highest_overall:.2f} / {lowest_overall:.2f}']
+            ]
+            
+            summary_table = Table(summary_data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+            summary_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#1f4788')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.whitesmoke),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                ('GRID', (0, 0), (-1, -1), 1, colors.whitesmoke)
+            ]))
+            
+            story.append(summary_table)
+            story.append(Spacer(1, 0.3*inch))
+            
+            # ========== FOOTER ==========
+            footer_style = ParagraphStyle(
+                'FooterStyle',
+                parent=styles['Normal'],
+                fontSize=8,
+                textColor=colors.HexColor('#999999'),
+                alignment=1
+            )
+            story.append(Paragraph("This report provides statistical analysis of course performance and enrollment data.", footer_style))
+            story.append(Paragraph(f"Report ID: {filename.split('.')[0]}", footer_style))
+            
+            # Build PDF
             doc.build(story)
             
             return True, f"Course statistics PDF saved to {filepath}"
@@ -400,7 +575,7 @@ class ReportGenerator:
     
     @classmethod
     def generate_top_students_pdf(cls, limit=10):
-        """Generate top students by GPA as PDF"""
+        """Generate top students by GPA as PDF with professional styling"""
         if not REPORTLAB_AVAILABLE:
             return False, "ReportLab not installed"
         
@@ -432,52 +607,145 @@ class ReportGenerator:
             filename = f"top_students_{limit}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
             filepath = os.path.join(cls.OUTPUT_DIR, filename)
             
-            doc = SimpleDocTemplate(filepath, pagesize=letter)
+            # Create PDF with margins
+            doc = SimpleDocTemplate(filepath, pagesize=letter,
+                                   leftMargin=0.5*inch, rightMargin=0.5*inch,
+                                   topMargin=0.75*inch, bottomMargin=0.75*inch)
             story = []
             styles = getSampleStyleSheet()
             
-            # Title
+            # ========== HEADER ==========
+            header_style = ParagraphStyle(
+                'HeaderStyle',
+                parent=styles['Normal'],
+                fontSize=9,
+                textColor=colors.HexColor('#666666'),
+                alignment=1,
+                spaceAfter=3
+            )
+            story.append(Paragraph("Student Records Management System", header_style))
+            story.append(Paragraph("Academic Excellence Recognition Report", header_style))
+            story.append(Spacer(1, 0.15*inch))
+            
+            # ========== TITLE ==========
             title_style = ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
-                fontSize=24,
+                fontSize=26,
                 textColor=colors.HexColor('#1f4788'),
-                spaceAfter=30,
-                alignment=1
+                spaceAfter=20,
+                alignment=1,
+                fontName='Helvetica-Bold'
             )
             story.append(Paragraph(f'TOP {limit} STUDENTS BY GPA', title_style))
-            story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
-            story.append(Spacer(1, 0.2*inch))
             
-            # Students Table
-            table_data = [['Rank', 'Student #', 'First Name', 'Last Name', 'GPA', 'Total Grades']]
+            # ========== REPORT INFO ==========
+            info_style = ParagraphStyle(
+                'InfoStyle',
+                parent=styles['Normal'],
+                fontSize=9,
+                textColor=colors.HexColor('#666666'),
+                alignment=1,
+                spaceAfter=12
+            )
+            story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y at %H:%M:%S')}", info_style))
+            story.append(Paragraph("Academic Performance Recognition List", info_style))
+            story.append(Spacer(1, 0.15*inch))
+            
+            # ========== STUDENTS TABLE ==========
+            table_data = [['Rank', 'Student #', 'First Name', 'Last Name', 'GPA', 'Grades']]
             
             for row in students:
+                rank_medal = "🥇" if row[0] == 1 else "🥈" if row[0] == 2 else "🥉" if row[0] == 3 else ""
                 table_data.append([
-                    str(row[0]),
+                    f"{row[0]}{rank_medal}",
                     str(row[1]),
                     str(row[2]),
                     str(row[3]),
-                    str(row[4]),
+                    f"{float(row[4]):.2f}",
                     str(row[5])
                 ])
             
-            table = Table(table_data, colWidths=[0.6*inch, 1*inch, 1.2*inch, 1.2*inch, 1*inch, 1*inch])
+            table = Table(table_data, colWidths=[0.7*inch, 1*inch, 1.3*inch, 1.3*inch, 0.95*inch, 0.8*inch])
             table.setStyle(TableStyle([
+                # Header
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f4788')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('ALIGNMENT', (0, 0), (-1, 0), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, 0), 12),
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                # Data rows with alternating colors for emphasis
+                ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#ffd700')),  # Gold for rank 1
+                ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor('#c0c0c0')),  # Silver for rank 2
+                ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#cd7f32')),  # Bronze for rank 3
+                ('BACKGROUND', (0, 4), (-1, -1), colors.HexColor('#f0f7ff')), # Light blue for others
+                # Styling for all data rows
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.HexColor('#333333')),
                 ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
                 ('FONTSIZE', (0, 1), (-1, -1), 10),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
+                ('ALIGNMENT', (0, 1), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 1), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 1), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
+                # Grid and borders
+                ('GRID', (0, 0), (-1, -1), 1.2, colors.HexColor('#1f4788')),
+                # Bold text for top 3
+                ('FONTNAME', (0, 1), (-1, 3), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 1), (-1, 3), 11)
             ]))
             
             story.append(table)
+            story.append(Spacer(1, 0.25*inch))
+            
+            # ========== ACHIEVEMENT SUMMARY ==========
+            top_gpa = float(students[0][4]) if students else 0
+            avg_top_gpa = sum([float(s[4]) for s in students]) / len(students) if students else 0
+            
+            achievement_header = ParagraphStyle(
+                'AchievementHeader',
+                parent=styles['Heading2'],
+                fontSize=12,
+                textColor=colors.HexColor('#1f4788'),
+                spaceAfter=10,
+                fontName='Helvetica-Bold'
+            )
+            
+            story.append(Paragraph('Performance Summary', achievement_header))
+            
+            achievement_data = [
+                ['Highest GPA:', f'{top_gpa:.2f}', 'Average Top {0} GPA:'.format(limit), f'{avg_top_gpa:.2f}']
+            ]
+            
+            achievement_table = Table(achievement_data, colWidths=[1.5*inch, 1.2*inch, 2*inch, 1.2*inch])
+            achievement_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#1f4788')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.whitesmoke),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 10)
+            ]))
+            
+            story.append(achievement_table)
+            story.append(Spacer(1, 0.3*inch))
+            
+            # ========== FOOTER ==========
+            footer_style = ParagraphStyle(
+                'FooterStyle',
+                parent=styles['Normal'],
+                fontSize=8,
+                textColor=colors.HexColor('#999999'),
+                alignment=1
+            )
+            story.append(Paragraph("This report recognizes academic excellence and outstanding performance.", footer_style))
+            story.append(Paragraph(f"Report ID: {filename.split('.')[0]}", footer_style))
+            
+            # Build PDF
             doc.build(story)
             
             return True, f"Top students PDF saved to {filepath}"

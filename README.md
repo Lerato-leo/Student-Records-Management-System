@@ -1,20 +1,24 @@
 # Student Records Management System
 
 ## Project Overview
-This project is a Student Records Management System designed to manage student information, course enrollments, grades, and attendance using a relational database and Python-based ETL pipelines.
+This project is a Student Records Management System designed to manage student information, course enrollments, grades, and attendance using a relational database and Python-based ETL pipelines with an advanced CLI interface.
 
 The project follows a phased, end-to-end data engineering approach aligned with the IBM Data Engineering Professional Certificate.
 
 ## Current Status
-**Phase 7 – Testing & Deployment (COMPLETED ✓)** 
-- Comprehensive test suite created: 75 unit tests (all PASSING)
-- Deployment guides written for Render and Railway
-- Python dependencies documented in requirements.txt
-- Production-ready codebase with full documentation
+**Phase 8 – CLI Enhancement & PDF Export (COMPLETED ✓)** 
+- Enhanced CLI with Delete operations (with confirmation prompts)
+- Added Search functionality (students by name/number, records by ID)
+- Implemented Pagination (5 items per page with navigation)
+- Added Sorting capabilities (by student number, first name, last name)
+- Integrated PDF export with ReportLab (3 report types)
+- Enhanced PDF styling with professional formatting, headers, footers
+- Updated documentation with new features
+- All PDFs generating successfully with professional appearance
 
-**All 7 Phases Completed** ✅
+**All 8 Phases Completed** ✅
 
-**Latest Commit:** `5ef02dd` (Phase 7: Testing & Deployment)
+**Latest Commit:** `be9e769` (PDF Export & Documentation)
 
 ## Project Phases
 
@@ -83,21 +87,103 @@ The project follows a phased, end-to-end data engineering approach aligned with 
 ### ✓ Phase 6: Python CLI Application
 **Complete CLI Interface with 5 Modules:**
 
-**app.py** - Menu-driven CLI (600+ lines)
+**app.py** - Menu-driven CLI (988+ lines, fully enhanced)
 - Main menu: 5 submenu options
-- Student Management: Add, view all, view details, update status
-- Enrollment Management: Enroll students, view rosters
-- Grades & Attendance: Record grades, mark attendance, view records
-- Reports: 5 report types (transcript, statistics, enrollment, low attendance, top students)
+- **Student Management:** 
+  - Add new student
+  - Search students (by name, student number)
+  - View all students (paginated, 5 per page)
+  - View student details
+  - Update student status
+  - **Delete student** (with two-level confirmation)
+  - **Sort students** (by number, first name, last name)
+- **Enrollment Management:** 
+  - Enroll student in course
+  - View enrollments (paginated)
+  - **Search enrollments** (by ID)
+  - **Delete enrollment** (with confirmation)
+  - View course roster
+- **Grades & Attendance:** 
+  - Record grade
+  - View grades (paginated)
+  - **Search grades** (by ID)
+  - **Delete grades** (with confirmation)
+  - Mark attendance
+  - View attendance (paginated)
+- **Reports Menu (9 options):**
+  - View student transcript
+  - Course grade statistics
+  - Enrollment statistics
+  - Top students by GPA
+  - Low attendance report
+  - Export all reports to CSV
+  - **✨ Student Transcript as PDF (NEW)**
+  - **✨ Course Statistics as PDF (NEW)**
+  - **✨ Top Students as PDF (NEW)**
 - Help system with comprehensive user guide
 
 **operations.py** - Business logic layer (300+ lines)
-- StudentOperations: CRUD operations for students
+- StudentOperations: CRUD operations for students, Search, Pagination, Sorting, Delete
 - CourseOperations: Course retrieval
-- EnrollmentOperations: Enrollment management via stored procedure
-- GradeOperations: Grade recording and transcript generation
-- AttendanceOperations: Attendance tracking
+- EnrollmentOperations: Enrollment management, Search, Delete
+- GradeOperations: Grade recording, Search, Delete
+- AttendanceOperations: Attendance tracking, Pagination
 - ReportOperations: Analytics and reporting functions
+
+**report_generator.py** - Report generation (750+ lines)
+- **CSV Export:**
+  - export_all_reports() - Generates 5 CSV files
+  - export_student_transcript_csv(student_id) - Individual transcripts
+- **PDF Export with Professional Styling:**
+  - generate_student_transcript_pdf(student_id)
+    * Institution header with report title
+    * Student information box
+    * Course transcript table with grades
+    * Academic summary (GPA, course count)
+    * Professional footer with generation details
+    * Styling: Dark blue headers, alternating row colors, proper formatting
+  - generate_course_statistics_pdf()
+    * Course performance table (Code, Name, Enrollments, Statistics)
+    * Overall statistics summary
+    * Professional formatting with headers and footers
+    * Statistics on total students, grades, averages
+  - generate_top_students_pdf(limit)
+    * Ranked student list by GPA
+    * Medal awards (🥇🥈🥉) for top 3
+    * Performance summary
+    * Color-coded rankings
+    * Professional layout with achievement header
+
+### ✓ Phase 7: Testing & Deployment
+- Comprehensive test suite: 75 unit tests (all PASSING)
+- Deployment guides written for Render and Railway
+- Python dependencies documented in requirements.txt
+- Production-ready codebase with full documentation
+
+### ✓ Phase 8: CLI Enhancement & PDF Export
+- **CRUD Operations Enhanced:**
+  - ✅ Create (Add) - Working for all entities
+  - ✅ Read (View/Search) - Paginated with search functionality
+  - ✅ Update - Modify student/enrollment status
+  - ✅ Delete - With two-level confirmation prompts
+- **Search Functionality:**
+  - Students: By name or student number
+  - Enrollments/Grades: By ID with pagination
+- **Pagination System:**
+  - 5 items per page
+  - Next/Previous navigation
+  - Current page display
+  - Works across all list views
+- **Sorting Capabilities:**
+  - Students: By student number, first name, last name
+  - Ascending/Descending order
+- **PDF Export with ReportLab:**
+  - Professional styling with headers and footers
+  - Formatted tables with color-coded rows
+  - Institution information and metadata
+  - Generation timestamps and report IDs
+  - 3 report types: Transcripts, Statistics, Rankings
+
 
 **validators.py** - Input validation (200+ lines)
 - 12 validator classes with 50+ validation methods
@@ -110,11 +196,12 @@ The project follows a phased, end-to-end data engineering approach aligned with 
 - SQLAlchemy engine pooling
 - Query execution methods with transaction support
 
-**report_generator.py** - CSV report generation
-- 5 report formats: transcripts, statistics, enrollment, low attendance, top students
+**report_generator.py** - Report generation (750+ lines)
+- CSV export for all report types
+- PDF export with professional ReportLab styling
 - Automated report generation to `/reports` directory
 
-- **Status:** Fully functional and tested ✓ (Commit: 7f435a6)
+**Status:** Fully functional and tested ✓ (Commit: 7f435a6)
 
 ### ✓ Phase 7: Testing & Deployment
 **Comprehensive Test Suite (75 Tests - ALL PASSING ✅)**
@@ -163,13 +250,33 @@ The project follows a phased, end-to-end data engineering approach aligned with 
   - Faker 20.1.0 (data generation)
   - pandas 2.1.3 (data processing)
   - pytest 9.0.2 (testing framework)
+  - ReportLab 4.4.9 (PDF generation)
 
 - **Status:** All tests passing, ready for production deployment ✓ (Commit: 5ef02dd)
 
+### ✓ Phase 8: CLI Enhancement & PDF Export
+**Advanced CLI Features**
+- **CRUD Operations:** Complete Create, Read (Search), Update, Delete with confirmations
+- **Pagination:** 5 items per page with next/previous navigation
+- **Search:** Students by name/number, records by ID
+- **Sorting:** Multiple sort options for students
+- **PDF Export:** 3 professional report types with ReportLab styling
+- **Features:** Confirmation prompts, navigation menus, user-friendly error handling
+
+**PDF Export Capabilities**
+- Student Transcript PDF: Personal records with GPA calculation
+- Course Statistics PDF: Department-level performance metrics
+- Top Students PDF: Academic achievement ranking with color-coded display
+- All PDFs include: Headers, footers, timestamps, report IDs
+- Professional styling with: Dark blue (#1f4788) headers, alternating row colors, proper spacing
+
+- **Status:** Enhanced CLI fully functional, PDF export tested ✓ (Commit: be9e769)
+
 ## Tech Stack
-- **Database:** PostgreSQL 12+
+- **Database:** PostgreSQL 12+ (16+ recommended)
 - **Backend/ETL:** Python 3.8+ (tested with 3.11.9)
 - **ORM:** SQLAlchemy 2.0
+- **PDF Generation:** ReportLab 4.4.9
 - **Testing:** pytest 7.4+
 - **Data Generation:** Faker 20.1
 - **Data Processing:** pandas 2.1
@@ -190,6 +297,42 @@ Entity relationships are enforced using:
 - **Check Constraints:** Status/value validation
 - **Unique Constraints:** No duplicate enrollments, student numbers, course codes
 - **NOT NULL Constraints:** Required fields enforcement
+
+## Features Overview
+
+### 🎓 Student Management
+- ➕ Add new students with validation
+- 🔍 Search students by name or number
+- 📋 View paginated student list
+- 👤 View detailed student information
+- ✏️ Update student status (active/inactive/graduated)
+- 🗑️ Delete students (with confirmation)
+- 📊 Sort students by various criteria
+
+### 📚 Course & Enrollment Management
+- View course catalog
+- 📝 Enroll students in courses
+- 👥 View course rosters (paginated)
+- 🔍 Search enrollments by ID
+- 🗑️ Delete enrollments (with confirmation)
+
+### 📈 Grades & Attendance Tracking
+- ➕ Record student grades
+- 📊 View grade history (paginated)
+- 🔍 Search grades by ID
+- ✅ Mark student attendance
+- 📅 View attendance records (paginated)
+
+### 📑 Reporting & Export
+- 📄 View student transcripts
+- 📊 Course grade statistics
+- 📈 Enrollment statistics
+- ⭐ Top students by GPA
+- 📉 Low attendance alerts
+- 💾 Export reports to CSV
+- **📕 Export student transcripts as PDF**
+- **📗 Export course statistics as PDF**
+- **📘 Export top students rankings as PDF**
 
 ## Quick Start
 
@@ -222,8 +365,26 @@ cp python/db_config.example.py python/db_config.py
 python python/generate_sample_data.py
 python python/etl_pipeline.py
 
+# Setup database views and procedures
+python python/setup_database.py
+
 # Launch CLI application
 python python/app.py
+```
+
+### Running the CLI
+```bash
+# Start the application (from python directory)
+cd python
+python app.py
+
+# Main Menu Options:
+# 1 - Student Management
+# 2 - Enrollment Management  
+# 3 - Grades & Attendance
+# 4 - Reports
+# 5 - Help & Documentation
+# 0 - Exit
 ```
 
 ### Running Tests
@@ -254,6 +415,7 @@ See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for step-by-step instructions:
 | 5 | SQL Queries & Procedures | ✅ Complete | 352 SQL |
 | 6 | Python CLI Application | ✅ Complete | 1400 Python |
 | 7 | Testing & Deployment | ✅ Complete | 500+ Python + Docs |
+| 8 | CLI Enhancement & PDF Export | ✅ Complete | 800+ Python |
 
 ## Learning Objectives Achieved
 ✅ Design and implement a normalized relational database schema (3NF)  
@@ -263,6 +425,9 @@ See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for step-by-step instructions:
 ✅ Deploy and document a complete data engineering solution  
 ✅ Create production-ready Python application with modular architecture  
 ✅ Implement security best practices (environment variables, credentials management)  
+✅ Build advanced CLI with CRUD operations, search, pagination, and sorting  
+✅ Generate professional PDF reports with ReportLab  
+✅ Enhance user experience with confirmation prompts and intuitive navigation  
 
 ## Project Links
 - **GitHub Repository:** https://github.com/Lerato-leo/Student-Records-Management-System
@@ -270,6 +435,8 @@ See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for step-by-step instructions:
 - **Testing Report:** [TESTING_REPORT.md](TESTING_REPORT.md)
 - **Project Verification:** [PROJECT_VERIFICATION_REPORT.md](PROJECT_VERIFICATION_REPORT.md)
 - **Reflections:** [REFLECTIONS.md](REFLECTIONS.md)
+- **CLI Quick Start:** [CLI_QUICK_START.md](CLI_QUICK_START.md)
+- **PDF Export Guide:** [PDF_EXPORT_GUIDE.md](PDF_EXPORT_GUIDE.md)
 
 ## Author & License
 **Lerato Matamela** - IBM Data Engineering Professional Certificate  
