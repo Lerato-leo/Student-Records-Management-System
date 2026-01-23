@@ -554,7 +554,8 @@ class StudentRecordsApp:
                 '3': 'Search Grades',
                 '4': 'Delete Grade',
                 '5': 'Mark Attendance',
-                '6': 'View Attendance Report'
+                '6': 'View All Attendance (Paginated)',
+                '7': 'View Attendance Report'
             }
             self.print_menu("GRADES & ATTENDANCE", options)
             
@@ -573,6 +574,8 @@ class StudentRecordsApp:
             elif choice == '5':
                 self.mark_attendance()
             elif choice == '6':
+                self.view_all_attendance_paginated()
+            elif choice == '7':
                 self.view_attendance_report()
             else:
                 print("❌ Invalid option")
@@ -692,6 +695,45 @@ class StudentRecordsApp:
             enrollment_id, status
         )
         print(f"  {'✅' if success else '❌'} {message}\n")
+    
+    def view_all_attendance_paginated(self):
+        """View all attendance records with pagination (newest first)"""
+        self.print_header("VIEW ALL ATTENDANCE RECORDS (PAGINATED)")
+        
+        attendance_records = AttendanceOperations.get_all_attendance()
+        if not attendance_records:
+            print("  No attendance records found\n")
+            return
+        
+        paginator = PaginationManager(attendance_records, page_size=5)
+        
+        while True:
+            print(f"  {paginator.get_page_info()}\n")
+            
+            headers = ["Attend ID", "Enroll ID", "Date", "Status"]
+            current = paginator.get_current_page()
+            self.print_table(headers, current)
+            
+            nav_options = []
+            if paginator.has_prev():
+                nav_options.append("p=Previous")
+            if paginator.has_next():
+                nav_options.append("n=Next")
+            nav_options.append("q=Quit")
+            
+            print("  Navigation: " + " | ".join(nav_options))
+            choice = input("  Select: ").strip().lower()
+            
+            if choice == 'n' and paginator.has_next():
+                paginator.next_page()
+            elif choice == 'p' and paginator.has_prev():
+                paginator.prev_page()
+            elif choice == 'q':
+                break
+            else:
+                print("  ❌ Invalid option")
+            
+            print()
     
     def view_attendance_report(self):
         """View attendance report from view"""

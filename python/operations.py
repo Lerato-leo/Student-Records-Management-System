@@ -29,12 +29,12 @@ class StudentOperations:
     
     @staticmethod
     def get_all_students():
-        """Get all students"""
+        """Get all students (newest first)"""
         try:
             query = """
                 SELECT student_id, student_number, first_name, last_name, date_of_birth, email, status
                 FROM students
-                ORDER BY student_number
+                ORDER BY student_id DESC
             """
             return DatabaseConnection.execute_query(query)
         except Exception as e:
@@ -314,12 +314,12 @@ class EnrollmentOperations:
     
     @staticmethod
     def get_all_enrollments():
-        """Get all enrollments"""
+        """Get all enrollments (newest first)"""
         try:
             query = """
                 SELECT enrollment_id, student_id, course_id, academic_year, term, enrollment_date
                 FROM enrollments
-                ORDER BY enrollment_id
+                ORDER BY enrollment_id DESC
             """
             return DatabaseConnection.execute_query(query)
         except Exception as e:
@@ -361,12 +361,12 @@ class GradeOperations:
     
     @staticmethod
     def get_all_grades():
-        """Get all grades"""
+        """Get all grades (newest first)"""
         try:
             query = """
                 SELECT grades_id, enrollment_id, grade_type, grade_value, grade_date
                 FROM grades
-                ORDER BY grades_id
+                ORDER BY grades_id DESC
             """
             return DatabaseConnection.execute_query(query)
         except Exception as e:
@@ -408,12 +408,12 @@ class AttendanceOperations:
     
     @staticmethod
     def get_all_attendance():
-        """Get all attendance records"""
+        """Get all attendance records (newest first)"""
         try:
             query = """
                 SELECT attendance_id, enrollment_id, attendance_date, status
                 FROM attendance
-                ORDER BY attendance_id
+                ORDER BY attendance_id DESC
             """
             return DatabaseConnection.execute_query(query)
         except Exception as e:
