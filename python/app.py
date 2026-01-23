@@ -13,16 +13,17 @@ from operations import (
     GradeOperations, AttendanceOperations, ReportOperations
 )
 from report_generator import ReportGenerator
+from logger import log_info, log_error, log_operation, log_debug
 
 
 class PaginationManager:
-    """Handle pagination for large datasets"""
+    """Handle pagination for large datasets with enhanced feedback"""
     
     def __init__(self, items, page_size=5):
-        self.items = items
-        self.page_size = page_size
+        self.items = items if items else []
+        self.page_size = max(1, page_size)  # Ensure page_size is at least 1
         self.current_page = 0
-        self.total_pages = (len(items) + page_size - 1) // page_size if items else 0
+        self.total_pages = (len(self.items) + self.page_size - 1) // self.page_size if self.items else 1
     
     def get_current_page(self):
         """Get current page items"""
@@ -34,7 +35,7 @@ class PaginationManager:
     
     def has_next(self):
         """Check if next page exists"""
-        return self.current_page < self.total_pages - 1
+        return self.current_page < self.total_pages - 1 if self.total_pages > 0 else False
     
     def has_prev(self):
         """Check if previous page exists"""
@@ -54,11 +55,23 @@ class PaginationManager:
             return True
         return False
     
+    def jump_to_page(self, page_number):
+        """Jump to specific page (1-indexed)"""
+        if 1 <= page_number <= self.total_pages:
+            self.current_page = page_number - 1
+            return True
+        return False
+    
     def get_page_info(self):
-        """Get page information"""
+        """Get detailed page information"""
         if not self.items:
-            return "No items"
-        return f"Page {self.current_page + 1}/{self.total_pages} ({len(self.items)} total items)"
+            return "No items available"
+        
+        current_items_start = self.current_page * self.page_size + 1
+        current_items_end = min((self.current_page + 1) * self.page_size, len(self.items))
+        
+        return (f"Page {self.current_page + 1}/{self.total_pages} | "
+                f"Showing items {current_items_start}-{current_items_end} of {len(self.items)}")
 
 
 class StudentRecordsApp:
@@ -95,19 +108,58 @@ class StudentRecordsApp:
         print("\n  0. Back to Main Menu")
         print("\n" + "="*70)
     
-    def get_input(self, prompt, input_type=str, allow_empty=False):
-        """Get validated user input"""
+    def get_input(self, prompt, input_type=str, allow_empty=False, min_val=None, max_val=None):
+        """Get validated user input with enhanced error handling"""
         while True:
             try:
                 value = input(prompt).strip()
-                if not value and not allow_empty:
-                    print("❌ Input cannot be empty")
+                
+                # Check empty input
+                if not value:
+                    if allow_empty:
+                        return value if input_type == str else None
+                    print("  ❌ Input cannot be empty. Please try again.")
                     continue
+                
+                # Handle different input types
                 if input_type == int:
-                    return int(value) if value else None
+                    try:
+                        num = int(value)
+                        if min_val is not None and num < min_val:
+                            print(f"  ❌ Value must be at least {min_val}")
+                            continue
+                        if max_val is not None and num > max_val:
+                            print(f"  ❌ Value must be at most {max_val}")
+                            continue
+                        return num
+                    except ValueError:
+                        print("  ❌ Invalid input. Please enter a valid integer.")
+                        continue
+                
+                elif input_type == float:
+                    try:
+                        num = float(value)
+                        if min_val is not None and num < min_val:
+                            print(f"  ❌ Value must be at least {min_val}")
+                            continue
+                        if max_val is not None and num > max_val:
+                            print(f"  ❌ Value must be at most {max_val}")
+                            continue
+                        return num
+                    except ValueError:
+                        print("  ❌ Invalid input. Please enter a valid decimal number.")
+                        continue
+                
+                # Return string (already stripped)
                 return value
-            except ValueError:
-                print(f"❌ Invalid input. Please enter a valid {input_type.__name__}")
+                
+            except KeyboardInterrupt:
+                print("\n\n  ⚠️  Operation cancelled by user")
+                return None
+            except Exception as e:
+                log_error("Error in get_input", exception=e)
+                print(f"  ❌ An unexpected error occurred: {str(e)}")
+                continue
     
     def confirm(self, prompt):
         """Get yes/no confirmation"""
@@ -184,115 +236,217 @@ class StudentRecordsApp:
             input("\nPress Enter to continue...")
     
     def add_student(self):
-        """Add new student"""
+        """Add new student with comprehensive validation and logging"""
         self.print_header("ADD NEW STUDENT")
         
-        student_number = self.get_input("  Student Number: ", int)
-        if not Validators.validate_student_number(student_number):
-            print("❌ Invalid student number")
-            return
+        try:
+            # Get and validate student number
+            while True:
+                student_number = self.get_input("  Student Number (YYYYRR): ", int)
+                if student_number is None:
+                    return
+                valid, msg = Validators.validate_student_number(student_number)
+                if valid:
+                    break
+                print(f"  ❌ {msg}. Please try again.")
+            
+            # Get and validate first name
+            while True:
+                first_name = self.get_input("  First Name: ")
+                if first_name is None:
+                    return
+                valid, msg = Validators.validate_name(first_name)
+                if valid:
+                    break
+                print(f"  ❌ {msg}. Please try again.")
+            
+            # Get and validate last name
+            while True:
+                last_name = self.get_input("  Last Name: ")
+                if last_name is None:
+                    return
+                valid, msg = Validators.validate_name(last_name)
+                if valid:
+                    break
+                print(f"  ❌ {msg}. Please try again.")
+            
+            # Get and validate date of birth
+            while True:
+                dob = self.get_input("  Date of Birth (YYYY-MM-DD): ")
+                if dob is None:
+                    return
+                valid, msg = Validators.validate_date_of_birth(dob)
+                if valid:
+                    break
+                print(f"  ❌ {msg}. Please try again.")
+            
+            # Get and validate email
+            while True:
+                email = self.get_input("  Email: ")
+                if email is None:
+                    return
+                valid, msg = Validators.validate_email(email)
+                if valid:
+                    break
+                print(f"  ❌ {msg}. Please try again.")
+            
+            # Add student
+            result = StudentOperations.add_student(
+                student_number, first_name, last_name, dob, email
+            )
+            
+            # Handle both old (2-tuple) and new (3-tuple) return formats
+            if len(result) == 3:
+                success, message, student_id = result
+                print(f"\n{'✅' if success else '❌'} {message}")
+                if success:
+                    log_info(f"Student added: {first_name} {last_name} (ID: {student_id})")
+            else:
+                success, message = result
+                print(f"\n{'✅' if success else '❌'} {message}")
+                if success:
+                    log_info(f"Student added: {first_name} {last_name}")
         
-        first_name = self.get_input("  First Name: ")
-        last_name = self.get_input("  Last Name: ")
-        
-        dob = self.get_input("  Date of Birth (YYYY-MM-DD): ")
-        if not Validators.validate_date(dob):
-            print("❌ Invalid date format")
-            return
-        
-        email = self.get_input("  Email: ")
-        if not Validators.validate_email(email):
-            print("❌ Invalid email format")
-            return
-        
-        success, message = StudentOperations.add_student(
-            student_number, first_name, last_name, dob, email
-        )
-        print(f"\n{'✅' if success else '❌'} {message}")
+        except Exception as e:
+            log_error("Error in add_student", exception=e)
+            print(f"\n  ❌ An unexpected error occurred: {str(e)}")
+    
     
     def search_students(self):
-        """Search students by name or number"""
+        """Search students by name or number (case-insensitive, partial match)"""
         self.print_header("SEARCH STUDENTS")
         
-        search_term = self.get_input("  Search (name or student number): ")
-        
         try:
-            # Try as number first
-            if search_term.isdigit():
-                students = [StudentOperations.get_student_by_number(int(search_term))]
-                students = [s for s in students if s]
-            else:
-                # Search by name
-                all_students = StudentOperations.get_all_students()
-                students = [s for s in all_students if search_term.lower() in 
-                           f"{s[2]} {s[3]}".lower()]
+            search_term = self.get_input("  Search (name or student number): ")
+            if search_term is None:
+                return
+            
+            if not search_term.strip():
+                print("  ❌ Search term cannot be empty\n")
+                return
+            
+            all_students = StudentOperations.get_all_students()
+            if not all_students:
+                print("  ❌ No students found in database\n")
+                return
+            
+            # Case-insensitive partial match search
+            search_lower = search_term.lower()
+            students = []
+            
+            for student in all_students:
+                # Search by ID, student number, or name (case-insensitive, partial match)
+                student_id, student_num, first_name, last_name, dob, email, status = student
+                
+                if (str(student_id).startswith(search_lower) or
+                    str(student_num).startswith(search_lower) or
+                    first_name.lower().startswith(search_lower) or
+                    last_name.lower().startswith(search_lower) or
+                    f"{first_name} {last_name}".lower().find(search_lower) != -1):
+                    students.append(student)
             
             if students:
                 headers = ["ID", "Num", "First Name", "Last Name", "DOB", "Email", "Status"]
+                print(f"  Found {len(students)} student(s):\n")
                 self.print_table(headers, students)
+                log_info(f"Search completed: '{search_term}' found {len(students)} results")
             else:
-                print("  ❌ No students found\n")
+                print(f"  ❌ No students found matching '{search_term}'\n")
+                log_info(f"Search completed: '{search_term}' found 0 results")
+        
         except Exception as e:
-            print(f"  ❌ Error: {e}\n")
+            log_error("Error in search_students", exception=e, context=f"search_term={search_term}")
+            print(f"  ❌ Error during search: {str(e)}\n")
     
     def view_all_students_paginated(self):
-        """View students with pagination"""
-        self.print_header("VIEW ALL STUDENTS (PAGINATED)")
+        """View students with pagination and comprehensive navigation"""
+        self.print_header("VIEW ALL STUDENTS (PAGINATED - NEWEST FIRST)")
         
-        students = StudentOperations.get_all_students()
-        if not students:
-            print("  No students found\n")
-            return
+        try:
+            students = StudentOperations.get_all_students()
+            if not students:
+                print("  ℹ️  No students found in database\n")
+                return
+            
+            paginator = PaginationManager(students, page_size=5)
+            
+            while True:
+                try:
+                    print(f"  📄 {paginator.get_page_info()}\n")
+                    
+                    headers = ["ID", "Num", "First Name", "Last Name", "DOB", "Email", "Status"]
+                    current = paginator.get_current_page()
+                    self.print_table(headers, current)
+                    
+                    # Build navigation options
+                    nav_options = []
+                    if paginator.has_prev():
+                        nav_options.append("p=Previous")
+                    if paginator.has_next():
+                        nav_options.append("n=Next")
+                    nav_options.append("q=Quit")
+                    
+                    print("  Navigation: " + " | ".join(nav_options))
+                    choice = input("  Enter choice: ").strip().lower()
+                    
+                    if choice == 'n':
+                        if paginator.has_next():
+                            paginator.next_page()
+                            print()
+                        else:
+                            print("  ⚠️  Already on last page\n")
+                    elif choice == 'p':
+                        if paginator.has_prev():
+                            paginator.prev_page()
+                            print()
+                        else:
+                            print("  ⚠️  Already on first page\n")
+                    elif choice == 'q':
+                        break
+                    else:
+                        print("  ❌ Invalid option. Please use p, n, or q\n")
+                
+                except KeyboardInterrupt:
+                    print("\n\n  ⚠️  Navigation cancelled\n")
+                    break
+                except Exception as e:
+                    log_error("Error in pagination loop", exception=e)
+                    print(f"  ❌ Error: {str(e)}\n")
+                    break
         
-        paginator = PaginationManager(students, page_size=5)
-        
-        while True:
-            print(f"  {paginator.get_page_info()}\n")
-            
-            headers = ["ID", "Num", "First Name", "Last Name", "DOB", "Email", "Status"]
-            current = paginator.get_current_page()
-            self.print_table(headers, current)
-            
-            nav_options = []
-            if paginator.has_prev():
-                nav_options.append("p=Previous Page")
-            if paginator.has_next():
-                nav_options.append("n=Next Page")
-            nav_options.append("q=Quit")
-            
-            print("  Navigation: " + " | ".join(nav_options))
-            choice = input("  Select: ").strip().lower()
-            
-            if choice == 'n' and paginator.has_next():
-                paginator.next_page()
-            elif choice == 'p' and paginator.has_prev():
-                paginator.prev_page()
-            elif choice == 'q':
-                break
-            else:
-                print("  ❌ Invalid option")
-            
-            print()
+        except Exception as e:
+            log_error("Error in view_all_students_paginated", exception=e)
+            print(f"  ❌ Error retrieving students: {str(e)}\n")
     
     def view_student_details(self):
-        """View detailed student information"""
+        """View detailed student information with error handling"""
         self.print_header("VIEW STUDENT DETAILS")
         
-        student_id = self.get_input("  Student ID: ", int)
-        student = StudentOperations.get_student_by_id(student_id)
+        try:
+            student_id = self.get_input("  Enter Student ID: ", int, min_val=1)
+            if student_id is None:
+                return
+            
+            student = StudentOperations.get_student_by_id(student_id)
+            
+            if not student:
+                print(f"  ❌ Student with ID {student_id} not found\n")
+                log_info(f"Student search: ID {student_id} not found")
+                return
+            
+            print("\n  " + "="*64)
+            print(f"  Student ID:         {student[0]}")
+            print(f"  Student Number:     {student[1]}")
+            print(f"  Full Name:          {student[2]} {student[3]}")
+            print(f"  Date of Birth:      {student[4]}")
+            print(f"  Email:              {student[5]}")
+            print(f"  Status:             {student[6]}")
+            print("  " + "="*64 + "\n")
+            log_info(f"Student details viewed: ID {student_id}")
         
-        if not student:
-            print("  ❌ Student not found\n")
-            return
-        
-        print("  " + "-"*66)
-        print(f"  Student ID:      {student[0]}")
-        print(f"  Student Number:  {student[1]}")
-        print(f"  Name:            {student[2]} {student[3]}")
-        print(f"  Date of Birth:   {student[4]}")
-        print(f"  Email:           {student[5]}")
-        print(f"  Status:          {student[6]}")
-        print("  " + "-"*66 + "\n")
+        except Exception as e:
+            log_error("Error in view_student_details", exception=e)
+            print(f"  ❌ Error retrieving student details: {str(e)}\n")
     
     def update_student_status(self):
         """Update student status"""
@@ -417,91 +571,171 @@ class StudentRecordsApp:
             input("\nPress Enter to continue...")
     
     def add_enrollment(self):
-        """Add enrollment"""
+        """Add enrollment with comprehensive validation"""
         self.print_header("ADD ENROLLMENT")
         
-        student_id = self.get_input("  Student ID: ", int)
-        if not StudentOperations.get_student_by_id(student_id):
-            print("  ❌ Student not found\n")
-            return
+        try:
+            # Get and validate student ID
+            student_id = self.get_input("  Enter Student ID: ", int, min_val=1)
+            if student_id is None:
+                return
+            
+            student = StudentOperations.get_student_by_id(student_id)
+            if not student:
+                print(f"  ❌ Student with ID {student_id} not found\n")
+                log_info(f"Enrollment: Student {student_id} not found")
+                return
+            print(f"  ✅ Student found: {student[2]} {student[3]}")
+            
+            # Get and validate course ID
+            course_id = self.get_input("  Enter Course ID: ", int, min_val=1)
+            if course_id is None:
+                return
+            
+            course = CourseOperations.get_course_by_id(course_id)
+            if not course:
+                print(f"  ❌ Course with ID {course_id} not found\n")
+                log_info(f"Enrollment: Course {course_id} not found")
+                return
+            print(f"  ✅ Course found: {course[1]}")
+            
+            # Get and validate academic year
+            while True:
+                academic_year = self.get_input("  Academic Year (YYYY-YYYY, e.g., 2024-2025): ")
+                if academic_year is None:
+                    return
+                valid, msg = Validators.validate_academic_year(academic_year)
+                if valid:
+                    break
+                print(f"  ❌ {msg}. Please try again.")
+            
+            # Get and validate term
+            while True:
+                term = self.get_input("  Term (1=Fall, 2=Spring): ")
+                if term is None:
+                    return
+                valid, msg = Validators.validate_term(term)
+                if valid:
+                    break
+                print(f"  ❌ {msg}. Please try again.")
+            
+            # Add enrollment
+            success, message = EnrollmentOperations.add_enrollment(
+                student_id, course_id, academic_year, term
+            )
+            print(f"\n  {'✅' if success else '❌'} {message}\n")
+            if success:
+                log_operation("add_enrollment", "success", f"Student {student_id}, Course {course_id}")
         
-        course_id = self.get_input("  Course ID: ", int)
-        if not CourseOperations.get_course_by_id(course_id):
-            print("  ❌ Course not found\n")
-            return
-        
-        academic_year = self.get_input("  Academic Year (e.g., 2024-2025): ")
-        term = self.get_input("  Term (1 or 2): ")
-        
-        if term not in ['1', '2']:
-            print("  ❌ Term must be 1 or 2\n")
-            return
-        
-        success, message = EnrollmentOperations.add_enrollment(
-            student_id, course_id, academic_year, term
-        )
-        print(f"  {'✅' if success else '❌'} {message}\n")
+        except Exception as e:
+            log_error("Error in add_enrollment", exception=e)
+            print(f"\n  ❌ Error: {str(e)}\n")
     
     def view_all_enrollments_paginated(self):
-        """View enrollments with pagination"""
-        self.print_header("VIEW ALL ENROLLMENTS (PAGINATED)")
+        """View enrollments with pagination and navigation (newest first)"""
+        self.print_header("VIEW ALL ENROLLMENTS (PAGINATED - NEWEST FIRST)")
         
-        enrollments = EnrollmentOperations.get_all_enrollments()
-        if not enrollments:
-            print("  No enrollments found\n")
-            return
+        try:
+            enrollments = EnrollmentOperations.get_all_enrollments()
+            if not enrollments:
+                print("  ℹ️  No enrollments found in database\n")
+                return
+            
+            paginator = PaginationManager(enrollments, page_size=5)
+            
+            while True:
+                try:
+                    print(f"  📄 {paginator.get_page_info()}\n")
+                    
+                    headers = ["Enroll ID", "Student ID", "Course ID", "Year", "Term", "Date"]
+                    current = paginator.get_current_page()
+                    self.print_table(headers, current)
+                    
+                    # Build navigation options
+                    nav_options = []
+                    if paginator.has_prev():
+                        nav_options.append("p=Previous")
+                    if paginator.has_next():
+                        nav_options.append("n=Next")
+                    nav_options.append("q=Quit")
+                    
+                    print("  Navigation: " + " | ".join(nav_options))
+                    choice = input("  Enter choice: ").strip().lower()
+                    
+                    if choice == 'n':
+                        if paginator.has_next():
+                            paginator.next_page()
+                            print()
+                        else:
+                            print("  ⚠️  Already on last page\n")
+                    elif choice == 'p':
+                        if paginator.has_prev():
+                            paginator.prev_page()
+                            print()
+                        else:
+                            print("  ⚠️  Already on first page\n")
+                    elif choice == 'q':
+                        break
+                    else:
+                        print("  ❌ Invalid option. Please use p, n, or q\n")
+                
+                except KeyboardInterrupt:
+                    print("\n\n  ⚠️  Navigation cancelled\n")
+                    break
+                except Exception as e:
+                    log_error("Error in enrollment pagination loop", exception=e)
+                    print(f"  ❌ Error: {str(e)}\n")
+                    break
         
-        paginator = PaginationManager(enrollments, page_size=5)
-        
-        while True:
-            print(f"  {paginator.get_page_info()}\n")
-            
-            headers = ["Enroll ID", "Student ID", "Course ID", "Year", "Term", "Date"]
-            current = paginator.get_current_page()
-            self.print_table(headers, current)
-            
-            nav_options = []
-            if paginator.has_prev():
-                nav_options.append("p=Previous")
-            if paginator.has_next():
-                nav_options.append("n=Next")
-            nav_options.append("q=Quit")
-            
-            print("  Navigation: " + " | ".join(nav_options))
-            choice = input("  Select: ").strip().lower()
-            
-            if choice == 'n' and paginator.has_next():
-                paginator.next_page()
-            elif choice == 'p' and paginator.has_prev():
-                paginator.prev_page()
-            elif choice == 'q':
-                break
-            else:
-                print("  ❌ Invalid option")
-            
-            print()
+        except Exception as e:
+            log_error("Error in view_all_enrollments_paginated", exception=e)
+            print(f"  ❌ Error retrieving enrollments: {str(e)}\n")
     
     def search_enrollments(self):
-        """Search enrollments by student or course"""
+        """Search enrollments by student or course with error handling"""
         self.print_header("SEARCH ENROLLMENTS")
         
-        search_type = self.get_input("  Search by (1=Student ID, 2=Course ID): ")
-        search_value = self.get_input("  Search value: ", int)
+        try:
+            print("  Search by:")
+            print("  1. Student ID")
+            print("  2. Course ID")
+            
+            search_type = self.get_input("\n  Select (1 or 2): ")
+            if search_type is None:
+                return
+            
+            if search_type not in ['1', '2']:
+                print("  ❌ Invalid search type. Please select 1 or 2\n")
+                return
+            
+            search_value = self.get_input("  Enter search value: ", int, min_val=1)
+            if search_value is None:
+                return
+            
+            enrollments = EnrollmentOperations.get_all_enrollments()
+            if not enrollments:
+                print("  ℹ️  No enrollments found in database\n")
+                return
+            
+            if search_type == '1':
+                results = [e for e in enrollments if e[1] == search_value]
+                search_label = f"Student ID {search_value}"
+            else:  # search_type == '2'
+                results = [e for e in enrollments if e[2] == search_value]
+                search_label = f"Course ID {search_value}"
+            
+            if results:
+                headers = ["Enroll ID", "Student ID", "Course ID", "Year", "Term", "Date"]
+                print(f"\n  Found {len(results)} enrollment(s) for {search_label}:\n")
+                self.print_table(headers, results)
+                log_info(f"Enrollment search: {search_label} found {len(results)} results")
+            else:
+                print(f"  ❌ No enrollments found for {search_label}\n")
+                log_info(f"Enrollment search: {search_label} found 0 results")
         
-        enrollments = EnrollmentOperations.get_all_enrollments()
-        if search_type == '1':
-            results = [e for e in enrollments if e[1] == search_value]
-        elif search_type == '2':
-            results = [e for e in enrollments if e[2] == search_value]
-        else:
-            print("  ❌ Invalid search type\n")
-            return
-        
-        if results:
-            headers = ["Enroll ID", "Student ID", "Course ID", "Year", "Term", "Date"]
-            self.print_table(headers, results)
-        else:
-            print("  ❌ No enrollments found\n")
+        except Exception as e:
+            log_error("Error in search_enrollments", exception=e)
+            print(f"  ❌ Error during search: {str(e)}\n")
     
     def delete_enrollment(self):
         """Delete enrollment"""

@@ -5,6 +5,7 @@ CRUD operations and stored procedure calls
 
 from database import DatabaseConnection
 from validators import Validators
+from logger import log_info, log_error, log_operation, log_debug
 
 
 class StudentOperations:
@@ -12,46 +13,94 @@ class StudentOperations:
     
     @staticmethod
     def add_student(student_number, first_name, last_name, date_of_birth, email, status='active'):
-        """Add a new student to the database"""
+        """Add a new student to the database with proper ID return"""
         try:
+            # Validate inputs first
+            valid, msg = Validators.validate_student_number(student_number)
+            if not valid:
+                log_error(f"Invalid student number: {student_number}", context=msg)
+                return False, msg
+            
+            valid, msg = Validators.validate_name(first_name)
+            if not valid:
+                log_error(f"Invalid first name: {first_name}", context=msg)
+                return False, f"First name: {msg}"
+            
+            valid, msg = Validators.validate_name(last_name)
+            if not valid:
+                log_error(f"Invalid last name: {last_name}", context=msg)
+                return False, f"Last name: {msg}"
+            
+            valid, msg = Validators.validate_date_of_birth(date_of_birth)
+            if not valid:
+                log_error(f"Invalid DOB: {date_of_birth}", context=msg)
+                return False, msg
+            
+            valid, msg = Validators.validate_email(email)
+            if not valid:
+                log_error(f"Invalid email: {email}", context=msg)
+                return False, msg
+            
+            valid, msg = Validators.validate_student_status(status)
+            if not valid:
+                log_error(f"Invalid status: {status}", context=msg)
+                return False, msg
+            
+            # Escape single quotes in strings to prevent SQL injection
+            first_name = first_name.replace("'", "''")
+            last_name = last_name.replace("'", "''")
+            email = email.replace("'", "''")
+            
             query = f"""
                 INSERT INTO students (student_number, first_name, last_name, date_of_birth, email, status)
                 VALUES ({student_number}, '{first_name}', '{last_name}', '{date_of_birth}', '{email}', '{status.lower()}')
-                RETURNING student_id, student_number, first_name, last_name;
+                RETURNING student_id;
             """
             result = DatabaseConnection.execute_query(query)
-            if result:
-                student_id, student_num, fname, lname = result[0]
-                return True, f"Student {fname} {lname} (ID: {student_id}) added successfully"
-            return False, "Failed to add student"
+            if result and len(result) > 0:
+                student_id = result[0][0]
+                msg = f"Student {first_name} {last_name} (ID: {student_id}) added successfully"
+                log_operation("add_student", "success", f"ID={student_id}, Num={student_number}")
+                return True, msg, student_id  # Return the ID
+            return False, "Failed to retrieve student ID after insertion"
         except Exception as e:
+            log_error("Error adding student", exception=e, context=f"Number={student_number}")
             return False, f"Error adding student: {str(e)}"
     
     @staticmethod
     def get_all_students():
-        """Get all students (newest first)"""
+        """Get all students (newest first) with error handling"""
         try:
             query = """
                 SELECT student_id, student_number, first_name, last_name, date_of_birth, email, status
                 FROM students
+                WHERE status != 'deleted'
                 ORDER BY student_id DESC
             """
-            return DatabaseConnection.execute_query(query)
+            result = DatabaseConnection.execute_query(query)
+            log_operation("get_all_students", "success", f"Retrieved {len(result) if result else 0} records")
+            return result if result else []
         except Exception as e:
-            return None
+            log_error("Error retrieving all students", exception=e)
+            return []
     
     @staticmethod
     def get_student_by_id(student_id):
-        """Get student by ID"""
+        """Get student by ID with error handling"""
         try:
             query = f"""
                 SELECT student_id, student_number, first_name, last_name, date_of_birth, email, status
                 FROM students
-                WHERE student_id = {student_id}
+                WHERE student_id = {student_id} AND status != 'deleted'
             """
             result = DatabaseConnection.execute_query(query)
-            return result[0] if result else None
+            if result and len(result) > 0:
+                log_debug(f"Student {student_id} retrieved successfully")
+                return result[0]
+            log_info(f"Student {student_id} not found", context="get_student_by_id")
+            return None
         except Exception as e:
+            log_error("Error retrieving student by ID", exception=e, context=f"ID={student_id}")
             return None
     
     @staticmethod
