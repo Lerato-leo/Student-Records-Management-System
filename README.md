@@ -281,22 +281,22 @@ The project follows a phased, end-to-end data engineering approach aligned with 
 - **TECHNICAL_REPORT_CONDENSED.md** - Technical architecture and implementation details
 
 ### Python Files (`python/` directory)
-**Core Application:**
+**CLI Application (5 files):**
 - `app.py` - Menu-driven CLI interface (1000+ lines)
 - `operations.py` - Business logic layer for all operations
 - `database.py` - Database connection management
-- `validators.py` - Input validation for all data types
-- `report_generator.py` - CSV and PDF report generation
+- `validators.py` - Input validation module (50+ validation methods)
+- `report_generator.py` - Report generation (CSV & PDF export)
 
-**ETL & Data:**
+**ETL Pipeline (2 files):**
 - `etl_pipeline.py` - ETL pipeline for data extraction and loading
 - `generate_sample_data.py` - Sample data generation using Faker
 
-**Configuration:**
+**Configuration (2 files):**
 - `db_config.example.py` - Example database configuration template
 - `db_config.py` - Database credentials (not pushed to GitHub)
 
-**Testing:**
+**Test Suite (2 files):**
 - `test_validators.py` - 53 unit tests for validation logic
 - `test_data_quality.py` - 22 data quality constraint tests
 
