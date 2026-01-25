@@ -62,6 +62,31 @@ class ReportGenerator:
         return issued, expires
     
     @classmethod
+    def convert_to_4point0_scale(cls, percentage_grade):
+        """
+        Convert percentage grade (0-100) to 4.0 GPA scale
+        A: 90-100 → 4.0
+        B: 80-89 → 3.0
+        C: 70-79 → 2.0
+        D: 60-69 → 1.0
+        F: 0-59 → 0.0
+        """
+        if percentage_grade is None:
+            return 0.0
+        
+        grade = float(percentage_grade)
+        if grade >= 90:
+            return 4.0
+        elif grade >= 80:
+            return 3.0
+        elif grade >= 70:
+            return 2.0
+        elif grade >= 60:
+            return 1.0
+        else:
+            return 0.0
+    
+    @classmethod
     def generate_student_transcript_csv(cls, student_id):
         """Generate student transcript as CSV"""
         try:
@@ -420,48 +445,6 @@ class ReportGenerator:
             ]))
             
             story.append(table)
-            story.append(Spacer(1, 0.2*inch))
-            
-            # ========== ACADEMIC SUMMARY WITH CONSTRAINTS ==========
-            total_courses = len(transcript)
-            avg_grades = [float(row[8]) for row in transcript if row[8]]
-            overall_avg = sum(avg_grades) / len(avg_grades) if avg_grades else 0
-            
-            summary_header = ParagraphStyle(
-                'SummaryHeader',
-                parent=styles['Heading2'],
-                fontSize=11,
-                textColor=colors.HexColor('#1f4788'),
-                spaceAfter=8,
-                fontName='Helvetica-Bold'
-            )
-            
-            story.append(Paragraph('ACADEMIC SUMMARY AND GRADE STATISTICS', summary_header))
-            
-            summary_data = [
-                ['Total Courses Completed:', str(total_courses), 'Overall GPA:', f'{overall_avg:.2f}'],
-                ['Minimum Grade Threshold:', '60', 'Average Grade Range:', '0-100'],
-                ['Grade Scale: A (90-100) | B (80-89) | C (70-79) | D (60-69) | F (0-59)', '', '', '']
-            ]
-            
-            summary_table = Table(summary_data, colWidths=[2*inch, 1.2*inch, 1.5*inch, 1.5*inch])
-            summary_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 1), colors.HexColor('#1f4788')),
-                ('TEXTCOLOR', (0, 0), (-1, 1), colors.whitesmoke),
-                ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor('#f0f0f0')),
-                ('FONTNAME', (0, 0), (-1, 1), 'Helvetica-Bold'),
-                ('FONTNAME', (0, 2), (-1, 2), 'Helvetica'),
-                ('FONTSIZE', (0, 0), (-1, 1), 10),
-                ('FONTSIZE', (0, 2), (-1, 2), 8),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('TOPPADDING', (0, 0), (-1, -1), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-                ('GRID', (0, 0), (-1, 1), 1, colors.whitesmoke),
-                ('GRID', (0, 2), (-1, 2), 0.5, colors.HexColor('#cccccc'))
-            ]))
-            
-            story.append(summary_table)
             story.append(Spacer(1, 0.3*inch))
             
             # ========== OFFICIAL CERTIFICATION & FOOTER ==========
@@ -503,10 +486,10 @@ class ReportGenerator:
             )
             
             story.append(Paragraph("═" * 80, footer_style))
-            story.append(Paragraph(f"Document ID: {document_id} | Verification Code: {verification_code}", footer_style))
-            story.append(Paragraph(f"Generated: {issued_date.strftime('%B %d, %Y at %H:%M:%S %Z')} | Valid Until: {expires_date.strftime('%B %d, %Y')}", footer_style))
-            story.append(Paragraph(f"Contact Registrar for verification: {INSTITUTION_INFO['email']} | {INSTITUTION_INFO['phone']}", footer_style))
-            story.append(Paragraph("OFFICIAL SEAL - TAMPER EVIDENT", footer_style))
+            story.append(Paragraph(f"Verification Code: {verification_code}", footer_style))
+            story.append(Paragraph(f"Generated: {issued_date.strftime('%B %d, %Y at %H:%M:%S')} | Valid Until: {expires_date.strftime('%B %d, %Y')}", footer_style))
+            story.append(Paragraph(f"Contact: {INSTITUTION_INFO['email']} | {INSTITUTION_INFO['phone']}", footer_style))
+            story.append(Paragraph("═" * 80, footer_style))
             
             # Build PDF
             doc.build(story)
@@ -913,16 +896,17 @@ class ReportGenerator:
             story.append(Spacer(1, 0.15*inch))
             
             # ========== STUDENTS TABLE ==========
-            table_data = [['Rank', 'Student #', 'First Name', 'Last Name', 'GPA', 'Grades']]
+            table_data = [['Rank', 'Student #', 'First Name', 'Last Name', 'GPA (4.0)', 'Grades']]
             
             for row in students:
                 rank_medal = "🥇" if row[0] == 1 else "🥈" if row[0] == 2 else "🥉" if row[0] == 3 else ""
+                gpa_4scale = cls.convert_to_4point0_scale(float(row[4]))
                 table_data.append([
                     f"{row[0]}{rank_medal}",
                     str(row[1]),
                     str(row[2]),
                     str(row[3]),
-                    f"{float(row[4]):.2f}",
+                    f"{gpa_4scale:.2f}",
                     str(row[5])
                 ])
             
@@ -961,8 +945,8 @@ class ReportGenerator:
             story.append(Spacer(1, 0.25*inch))
             
             # ========== ACHIEVEMENT SUMMARY ==========
-            top_gpa = float(students[0][4]) if students else 0
-            avg_top_gpa = sum([float(s[4]) for s in students]) / len(students) if students else 0
+            top_gpa = self.convert_to_4point0_scale(float(students[0][4])) if students else 0
+            avg_top_gpa = sum([self.convert_to_4point0_scale(float(s[4])) for s in students]) / len(students) if students else 0
             
             achievement_header = ParagraphStyle(
                 'AchievementHeader',
@@ -976,7 +960,7 @@ class ReportGenerator:
             story.append(Paragraph('Performance Summary', achievement_header))
             
             achievement_data = [
-                ['Highest GPA:', f'{top_gpa:.2f}', 'Average Top {0} GPA:'.format(limit), f'{avg_top_gpa:.2f}']
+                ['Highest GPA (4.0):', f'{top_gpa:.2f}', 'Average Top {0} GPA (4.0):'.format(limit), f'{avg_top_gpa:.2f}']
             ]
             
             achievement_table = Table(achievement_data, colWidths=[1.5*inch, 1.2*inch, 2*inch, 1.2*inch])

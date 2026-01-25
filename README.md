@@ -272,6 +272,25 @@ The project follows a phased, end-to-end data engineering approach aligned with 
 
 - **Status:** Enhanced CLI fully functional, PDF export tested ✓ (Commit: be9e769)
 
+## Documentation Files
+
+### Included in Repository (Pushed to GitHub)
+- **README.md** - Project overview, features, and quick start guide
+- **REFLECTIONS.md** - Learning insights and project retrospective
+- **TESTING_REPORT.md** - Comprehensive test suite documentation and results
+- **TECHNICAL_REPORT_CONDENSED.md** - Technical architecture and implementation details
+
+### Local Documentation (Not Pushed)
+The following documentation files are kept locally in the parent directory for reference but are not included in the GitHub repository:
+- DELIVERABLES_COMPLETE.md
+- ENHANCEMENTS_COMPLETE.md
+- ERD_DIAGRAM.md
+- PRESENTATION_OUTLINE.md
+- README_SUBMISSION.md
+- SUBMISSION_CHECKLIST.md
+- SUBMISSION_SUMMARY.md
+- (Plus other documentation files in parent DATA PROJECT 1 directory)
+
 ## Tech Stack
 - **Database:** PostgreSQL 12+ (16+ recommended)
 - **Backend/ETL:** Python 3.8+ (tested with 3.11.9)

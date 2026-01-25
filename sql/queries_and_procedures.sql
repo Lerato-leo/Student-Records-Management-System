@@ -27,7 +27,12 @@ SELECT
     c.course_name,
     e.academic_year,
     e.term,
-    ROUND(AVG(g.grade_value)::NUMERIC, 2) AS average_grade
+    ROUND(AVG(g.grade_value)::NUMERIC, 2) AS average_grade,
+    CASE 
+        WHEN ROUND(AVG(g.grade_value)::NUMERIC, 2) >= 50 THEN 'Pass'
+        WHEN ROUND(AVG(g.grade_value)::NUMERIC, 2) >= 40 THEN 'Supplementary'
+        ELSE 'Failed'
+    END AS grade_status
 FROM students s
 JOIN enrollments e ON s.student_id = e.student_id
 JOIN courses c ON e.course_id = c.course_id
@@ -116,7 +121,18 @@ SELECT
     ROUND(
         SUM(g.grade_value * gw.weight) / SUM(gw.weight),
         2
-    ) AS final_average
+    ) AS final_average,
+    CASE 
+        WHEN ROUND(
+            SUM(g.grade_value * gw.weight) / SUM(gw.weight),
+            2
+        ) >= 50 THEN 'Pass'
+        WHEN ROUND(
+            SUM(g.grade_value * gw.weight) / SUM(gw.weight),
+            2
+        ) >= 40 THEN 'Supplementary'
+        ELSE 'Failed'
+    END AS grade_status
 FROM students s
 JOIN enrollments e ON s.student_id = e.student_id
 JOIN courses c ON e.course_id = c.course_id

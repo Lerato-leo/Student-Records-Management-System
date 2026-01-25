@@ -16,6 +16,31 @@ from report_generator import ReportGenerator
 from logger import log_info, log_error, log_operation, log_debug
 
 
+def convert_to_4point0_gpa(percentage_grade):
+    """
+    Convert percentage grade (0-100) to 4.0 GPA scale
+    A: 90-100 → 4.0
+    B: 80-89 → 3.0
+    C: 70-79 → 2.0
+    D: 60-69 → 1.0
+    F: 0-59 → 0.0
+    """
+    if percentage_grade is None:
+        return 0.0
+    
+    grade = float(percentage_grade)
+    if grade >= 90:
+        return 4.0
+    elif grade >= 80:
+        return 3.0
+    elif grade >= 70:
+        return 2.0
+    elif grade >= 60:
+        return 1.0
+    else:
+        return 0.0
+
+
 class PaginationManager:
     """Handle pagination for large datasets with enhanced feedback"""
     
@@ -1114,7 +1139,7 @@ class StudentRecordsApp:
     
     def report_top_students_weighted_gpa(self):
         """Top students by weighted GPA"""
-        self.print_header("TOP STUDENTS BY WEIGHTED GPA")
+        self.print_header("TOP STUDENTS BY WEIGHTED GPA (4.0 SCALE)")
         print("  Weights: Assignment 30% | Test 30% | Exam 40%\n")
         
         try:
@@ -1132,8 +1157,14 @@ class StudentRecordsApp:
             result = DatabaseConnection.execute_query(query)
             
             if result:
-                headers = ["Rank", "Student #", "First Name", "Last Name", "Weighted GPA"]
-                self.print_table(headers, result)
+                headers = ["Rank", "Student #", "First Name", "Last Name", "GPA (4.0)"]
+                # Convert GPA values to 4.0 scale
+                converted_result = []
+                for row in result:
+                    converted_row = list(row)
+                    converted_row[4] = f"{convert_to_4point0_gpa(row[4]):.2f}"
+                    converted_result.append(tuple(converted_row))
+                self.print_table(headers, converted_result)
             else:
                 print("  ❌ No data found\n")
         except Exception as e:
@@ -1170,7 +1201,7 @@ class StudentRecordsApp:
     
     def report_student_gpa_breakdown(self):
         """View student GPA with course breakdown"""
-        self.print_header("STUDENT GPA BREAKDOWN")
+        self.print_header("STUDENT GPA BREAKDOWN (4.0 SCALE)")
         print("  Weights: Assignment 30% | Test 30% | Exam 40%\n")
         
         student_id = self.get_input("  Enter Student ID: ", int)
@@ -1181,8 +1212,9 @@ class StudentRecordsApp:
             gpa_result = DatabaseConnection.execute_query(gpa_query)
             
             if gpa_result:
+                gpa_4scale = convert_to_4point0_gpa(gpa_result[0][4])
                 print(f"\n  Student: {gpa_result[0][1]} ({gpa_result[0][2]} {gpa_result[0][3]})")
-                print(f"  Overall GPA: {gpa_result[0][4]}\n")
+                print(f"  Overall GPA (4.0): {gpa_4scale:.2f}\n")
                 
                 # Get course breakdown
                 course_query = f"""
