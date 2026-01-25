@@ -1,22 +1,1129 @@
 """
 Student Records Management System - Enhanced CLI Application
 Features: CRUD with Delete, Search, Pagination, Sorting, and More
+Consolidated single-file version with all modules integrated
 """
 
 import sys
 import os
-from datetime import datetime
-from database import DatabaseConnection
-from validators import Validators
-from operations import (
-    StudentOperations, CourseOperations, EnrollmentOperations,
-    GradeOperations, AttendanceOperations, ReportOperations
-)
-from report_generator import ReportGenerator
-from logger import log_info, log_error, log_operation, log_debug
+import csv
+import hashlib
+import uuid
+import re
+from datetime import datetime, timedelta
+from sqlalchemy import create_engine, text
+from urllib.parse import quote_plus
+from db_config import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+
+try:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.lib import colors
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+
+# Institution Information (for audit compliance)
+INSTITUTION_INFO = {
+    'name': 'Educational Records System',
+    'accreditation': 'Certified Academic Institution',
+    'email': 'registrar@institution.edu',
+    'phone': '+1 (555) 123-4567',
+    'address': 'Academic Records Office',
+}
 
 
-def convert_to_4point0_gpa(percentage_grade):
+# ========================================================================
+# DATABASE CONNECTION MODULE
+# ========================================================================
+
+class DatabaseConnection:
+    """Singleton database connection manager"""
+    
+    _engine = None
+    
+    @classmethod
+    def get_engine(cls):
+        """Get or create database engine"""
+        if cls._engine is None:
+            connection_string = f"postgresql://{DB_USER}:{quote_plus(DB_PASSWORD)}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+            cls._engine = create_engine(connection_string)
+        return cls._engine
+    
+    @classmethod
+    def execute_query(cls, query):
+        """Execute a SELECT query and return results"""
+        engine = cls.get_engine()
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text(query))
+                return result.fetchall()
+        except Exception as e:
+            raise Exception(f"Query execution failed: {str(e)}")
+    
+    @classmethod
+    def execute_scalar(cls, query):
+        """Execute a query and return single value"""
+        engine = cls.get_engine()
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text(query))
+                return result.scalar()
+        except Exception as e:
+            raise Exception(f"Query execution failed: {str(e)}")
+    
+    @classmethod
+    def execute_procedure(cls, procedure_call):
+        """Execute a stored procedure"""
+        engine = cls.get_engine()
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(procedure_call))
+                conn.commit()
+                return True
+        except Exception as e:
+            raise Exception(f"Procedure execution failed: {str(e)}")
+    
+    @classmethod
+    def test_connection(cls):
+        """Test database connection"""
+        engine = cls.get_engine()
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return True
+        except Exception as e:
+            return False
+
+
+# ========================================================================
+# VALIDATORS MODULE
+# ========================================================================
+
+class Validators:
+    """Input validation functions"""
+    
+    @staticmethod
+    def validate_student_number(student_number):
+        """
+        Validate student number format: YYYYRR (6 digits)
+        Example: 199545 (birth year 1995, random suffix 45)
+        """
+        if not isinstance(student_number, int):
+            return False, "Student number must be an integer"
+        
+        if len(str(student_number)) != 6:
+            return False, "Student number must be exactly 6 digits (YYYYRR format)"
+        
+        year = int(str(student_number)[:4])
+        if year < 1950 or year > datetime.now().year:
+            return False, f"Birth year must be between 1950 and {datetime.now().year}"
+        
+        return True, "Valid"
+    
+    @staticmethod
+    def validate_email(email):
+        """Validate email format"""
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if re.match(pattern, email):
+            return True, "Valid"
+        return False, "Invalid email format"
+    
+    @staticmethod
+    def validate_name(name):
+        """Validate first/last name"""
+        if not name or len(name) < 2 or len(name) > 50:
+            return False, "Name must be 2-50 characters"
+        
+        if not name.replace(" ", "").replace("-", "").isalpha():
+            return False, "Name must contain only letters, spaces, or hyphens"
+        
+        return True, "Valid"
+    
+    @staticmethod
+    def validate_date(date_str, format="%Y-%m-%d"):
+        """Validate date format"""
+        try:
+            datetime.strptime(date_str, format)
+            return True, "Valid"
+        except ValueError:
+            return False, f"Invalid date format. Use {format}"
+    
+    @staticmethod
+    def validate_date_of_birth(date_str):
+        """Validate date of birth (must be 18+ years old)"""
+        valid, msg = Validators.validate_date(date_str)
+        if not valid:
+            return False, msg
+        
+        try:
+            dob = datetime.strptime(date_str, "%Y-%m-%d")
+            today = datetime.today()
+            age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+            
+            if age < 18:
+                return False, "Student must be at least 18 years old"
+            
+            if age > 100:
+                return False, "Invalid date of birth (age > 100)"
+            
+            return True, "Valid"
+        except Exception as e:
+            return False, str(e)
+    
+    @staticmethod
+    def validate_academic_year(year_str):
+        """
+        Validate academic year format: YYYY-YYYY
+        Example: 2024-2025
+        """
+        if '-' not in year_str:
+            return False, "Academic year must be in format YYYY-YYYY (e.g., 2024-2025)"
+        
+        parts = year_str.split('-')
+        if len(parts) != 2:
+            return False, "Academic year must have format YYYY-YYYY"
+        
+        try:
+            year1 = int(parts[0])
+            year2 = int(parts[1])
+            
+            if year2 != year1 + 1:
+                return False, f"End year must be {year1 + 1} (start year + 1)"
+            
+            if year1 < 2000 or year1 > datetime.now().year + 5:
+                return False, "Academic year must be realistic (2000-2030)"
+            
+            return True, "Valid"
+        except ValueError:
+            return False, "Academic year must contain valid integers"
+    
+    @staticmethod
+    def validate_term(term):
+        """Validate enrollment term: 1 or 2"""
+        if term not in ['1', '2']:
+            return False, "Term must be '1' (Fall) or '2' (Spring)"
+        return True, "Valid"
+    
+    @staticmethod
+    def validate_grade_type(grade_type):
+        """Validate grade type"""
+        valid_types = ['test', 'assignment', 'exam']
+        if grade_type.lower() not in valid_types:
+            return False, f"Grade type must be one of: {', '.join(valid_types)}"
+        return True, "Valid"
+    
+    @staticmethod
+    def validate_grade_value(grade_value):
+        """Validate grade value (0-100)"""
+        try:
+            grade = int(grade_value)
+            if grade < 0 or grade > 100:
+                return False, "Grade must be between 0 and 100"
+            return True, "Valid"
+        except ValueError:
+            return False, "Grade must be a number"
+    
+    @staticmethod
+    def validate_attendance_status(status):
+        """Validate attendance status"""
+        valid_statuses = ['present', 'absent', 'late']
+        if status.lower() not in valid_statuses:
+            return False, f"Status must be one of: {', '.join(valid_statuses)}"
+        return True, "Valid"
+    
+    @staticmethod
+    def validate_student_status(status):
+        """Validate student status"""
+        valid_statuses = ['active', 'inactive', 'graduated']
+        if status.lower() not in valid_statuses:
+            return False, f"Status must be one of: {', '.join(valid_statuses)}"
+        return True, "Valid"
+    
+    @staticmethod
+    def validate_integer(value, min_val=None, max_val=None):
+        """Validate integer input"""
+        try:
+            num = int(value)
+            if min_val is not None and num < min_val:
+                return False, f"Value must be at least {min_val}"
+            if max_val is not None and num > max_val:
+                return False, f"Value must be at most {max_val}"
+            return True, "Valid"
+        except ValueError:
+            return False, "Input must be a valid integer"
+    
+    @staticmethod
+    def validate_grade(grade_value):
+        """Validate grade value"""
+        try:
+            grade = int(grade_value)
+            if 0 <= grade <= 100:
+                return True
+            return False
+        except:
+            return False
+
+
+# ========================================================================
+# DATABASE OPERATIONS MODULE
+# ========================================================================
+
+class StudentOperations:
+    """Student management operations"""
+    
+    @staticmethod
+    def add_student(student_number, first_name, last_name, date_of_birth, email, status='active'):
+        """Add a new student to the database with proper ID return"""
+        try:
+            # Validate inputs first
+            valid, msg = Validators.validate_student_number(student_number)
+            if not valid:
+                return False, msg
+            
+            valid, msg = Validators.validate_name(first_name)
+            if not valid:
+                return False, f"First name: {msg}"
+            
+            valid, msg = Validators.validate_name(last_name)
+            if not valid:
+                return False, f"Last name: {msg}"
+            
+            valid, msg = Validators.validate_date_of_birth(date_of_birth)
+            if not valid:
+                return False, msg
+            
+            valid, msg = Validators.validate_email(email)
+            if not valid:
+                return False, msg
+            
+            valid, msg = Validators.validate_student_status(status)
+            if not valid:
+                return False, msg
+            
+            # Escape single quotes in strings to prevent SQL injection
+            first_name = first_name.replace("'", "''")
+            last_name = last_name.replace("'", "''")
+            email = email.replace("'", "''")
+            
+            query = f"""
+                INSERT INTO students (student_number, first_name, last_name, date_of_birth, email, status)
+                VALUES ({student_number}, '{first_name}', '{last_name}', '{date_of_birth}', '{email}', '{status.lower()}')
+                RETURNING student_id;
+            """
+            result = DatabaseConnection.execute_query(query)
+            if result and len(result) > 0:
+                student_id = result[0][0]
+                msg = f"Student {first_name} {last_name} (ID: {student_id}) added successfully"
+                return True, msg, student_id
+            return False, "Failed to retrieve student ID after insertion"
+        except Exception as e:
+            return False, f"Error adding student: {str(e)}"
+    
+    @staticmethod
+    def get_all_students():
+        """Get all students (newest first) with error handling"""
+        try:
+            query = """
+                SELECT student_id, student_number, first_name, last_name, date_of_birth, email, status
+                FROM students
+                WHERE status != 'deleted'
+                ORDER BY student_id DESC
+            """
+            result = DatabaseConnection.execute_query(query)
+            return result if result else []
+        except Exception as e:
+            return []
+    
+    @staticmethod
+    def get_student_by_id(student_id):
+        """Get student by ID with error handling"""
+        try:
+            query = f"""
+                SELECT student_id, student_number, first_name, last_name, date_of_birth, email, status
+                FROM students
+                WHERE student_id = {student_id} AND status != 'deleted'
+            """
+            result = DatabaseConnection.execute_query(query)
+            if result and len(result) > 0:
+                return result[0]
+            return None
+        except Exception as e:
+            return None
+    
+    @staticmethod
+    def get_student_by_number(student_number):
+        """Get student by student number"""
+        try:
+            query = f"""
+                SELECT student_id, student_number, first_name, last_name, date_of_birth, email, status
+                FROM students
+                WHERE student_number = {student_number}
+            """
+            result = DatabaseConnection.execute_query(query)
+            return result[0] if result else None
+        except Exception as e:
+            return None
+    
+    @staticmethod
+    def update_student_status(student_id, status):
+        """Update student status"""
+        try:
+            query = f"""
+                UPDATE students
+                SET status = '{status.lower()}'
+                WHERE student_id = {student_id}
+            """
+            DatabaseConnection.execute_procedure(query)
+            return True, f"Student status updated to '{status}'"
+        except Exception as e:
+            return False, f"Error updating status: {str(e)}"
+
+
+class CourseOperations:
+    """Course management operations"""
+    
+    @staticmethod
+    def get_all_courses():
+        """Get all courses"""
+        try:
+            query = """
+                SELECT course_id, course_code, course_name, credits, status
+                FROM courses
+                WHERE status = 'active'
+                ORDER BY course_code
+            """
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return None
+    
+    @staticmethod
+    def get_course_by_id(course_id):
+        """Get course by ID"""
+        try:
+            query = f"""
+                SELECT course_id, course_code, course_name, credits, status
+                FROM courses
+                WHERE course_id = {course_id}
+            """
+            result = DatabaseConnection.execute_query(query)
+            return result[0] if result else None
+        except Exception as e:
+            return None
+
+
+class EnrollmentOperations:
+    """Enrollment management operations"""
+    
+    @staticmethod
+    def add_enrollment(student_id, course_id, academic_year, term):
+        """Add new enrollment"""
+        try:
+            query = f"""
+                INSERT INTO enrollments (student_id, course_id, academic_year, term, enrollment_date)
+                VALUES ({student_id}, {course_id}, '{academic_year}', '{term}', CURRENT_DATE)
+                RETURNING enrollment_id;
+            """
+            result = DatabaseConnection.execute_query(query)
+            if result:
+                return True, f"Enrollment added successfully (ID: {result[0][0]})"
+            return False, "Failed to add enrollment"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+    
+    @staticmethod
+    def get_all_enrollments():
+        """Get all enrollments (newest first)"""
+        try:
+            query = """
+                SELECT enrollment_id, student_id, course_id, academic_year, term, enrollment_date
+                FROM enrollments
+                ORDER BY enrollment_id DESC
+            """
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return []
+    
+    @staticmethod
+    def get_enrollment_by_id(enrollment_id):
+        """Get enrollment by ID"""
+        try:
+            query = f"""
+                SELECT enrollment_id, student_id, course_id, academic_year, term, enrollment_date
+                FROM enrollments
+                WHERE enrollment_id = {enrollment_id}
+            """
+            result = DatabaseConnection.execute_query(query)
+            return result[0] if result else None
+        except Exception as e:
+            return None
+    
+    @staticmethod
+    def get_student_enrollments(student_id):
+        """Get all enrollments for a student"""
+        try:
+            query = f"""
+                SELECT e.enrollment_id, s.student_number, c.course_code, c.course_name, 
+                       e.academic_year, e.term, e.enrollment_date
+                FROM enrollments e
+                JOIN students s ON e.student_id = s.student_id
+                JOIN courses c ON e.course_id = c.course_id
+                WHERE e.student_id = {student_id}
+                ORDER BY e.academic_year DESC, e.term
+            """
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return None
+    
+    @staticmethod
+    def get_course_enrollments(course_id):
+        """Get all enrollments for a course"""
+        try:
+            query = f"""
+                SELECT e.enrollment_id, s.student_id, s.student_number, s.first_name, s.last_name,
+                       e.academic_year, e.term, e.enrollment_date
+                FROM enrollments e
+                JOIN students s ON e.student_id = s.student_id
+                WHERE e.course_id = {course_id}
+                ORDER BY s.student_number
+            """
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return None
+
+
+class GradeOperations:
+    """Grade management operations"""
+    
+    @staticmethod
+    def add_grade(enrollment_id, grade_type, grade_value):
+        """Add grade"""
+        try:
+            query = f"""
+                INSERT INTO grades (enrollment_id, grade_type, grade_value, grade_date)
+                VALUES ({enrollment_id}, '{grade_type}', {grade_value}, CURRENT_DATE)
+                RETURNING grades_id;
+            """
+            result = DatabaseConnection.execute_query(query)
+            if result:
+                return True, f"Grade added successfully"
+            return False, "Failed to add grade"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+    
+    @staticmethod
+    def get_all_grades():
+        """Get all grades (newest first)"""
+        try:
+            query = """
+                SELECT grades_id, enrollment_id, grade_type, grade_value, grade_date
+                FROM grades
+                ORDER BY grades_id DESC
+            """
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return []
+    
+    @staticmethod
+    def get_grade_by_id(grade_id):
+        """Get grade by ID"""
+        try:
+            query = f"""
+                SELECT grades_id, enrollment_id, grade_type, grade_value, grade_date
+                FROM grades
+                WHERE grades_id = {grade_id}
+            """
+            result = DatabaseConnection.execute_query(query)
+            return result[0] if result else None
+        except Exception as e:
+            return None
+    
+    @staticmethod
+    def get_enrollment_grades(enrollment_id):
+        """Get all grades for an enrollment"""
+        try:
+            query = f"""
+                SELECT grades_id, grade_type, grade_value, grade_date
+                FROM grades
+                WHERE enrollment_id = {enrollment_id}
+                ORDER BY grade_date DESC
+            """
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return None
+    
+    @staticmethod
+    def get_student_transcript(student_id):
+        """Get student transcript (all grades from all courses)"""
+        try:
+            query = f"""
+                SELECT * FROM vw_student_transcripts
+                WHERE student_id = {student_id}
+                ORDER BY academic_year DESC
+            """
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return None
+
+
+class AttendanceOperations:
+    """Attendance management operations"""
+    
+    @staticmethod
+    def mark_attendance(enrollment_id, status):
+        """Mark attendance"""
+        try:
+            query = f"""
+                INSERT INTO attendance (enrollment_id, attendance_date, status)
+                VALUES ({enrollment_id}, CURRENT_DATE, '{status}')
+                RETURNING attendance_id;
+            """
+            result = DatabaseConnection.execute_query(query)
+            if result:
+                return True, f"Attendance marked as '{status}'"
+            return False, "Failed to mark attendance"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+    
+    @staticmethod
+    def get_all_attendance():
+        """Get all attendance records (newest first)"""
+        try:
+            query = """
+                SELECT attendance_id, enrollment_id, attendance_date, status
+                FROM attendance
+                ORDER BY attendance_id DESC
+            """
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return []
+    
+    @staticmethod
+    def get_enrollment_attendance(enrollment_id):
+        """Get attendance records for an enrollment"""
+        try:
+            query = f"""
+                SELECT attendance_id, attendance_date, status
+                FROM attendance
+                WHERE enrollment_id = {enrollment_id}
+                ORDER BY attendance_date DESC
+            """
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return None
+
+
+class ReportOperations:
+    """Report and statistics operations"""
+    
+    @staticmethod
+    def get_course_grade_statistics():
+        """Get grade statistics for all courses"""
+        try:
+            query = """SELECT * FROM get_course_grade_statistics()"""
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return None
+    
+    @staticmethod
+    def get_low_attendance_students():
+        """Get students with <75% attendance"""
+        try:
+            query = """SELECT * FROM get_low_attendance_students()"""
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return None
+    
+    @staticmethod
+    def get_top_students_by_gpa(limit=10):
+        """Get top students by GPA"""
+        try:
+            query = f"""SELECT * FROM get_top_students_by_gpa({limit})"""
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return None
+    
+    @staticmethod
+    def get_enrollment_statistics():
+        """Get enrollment statistics for all courses"""
+        try:
+            query = """SELECT * FROM get_enrollment_statistics()"""
+            return DatabaseConnection.execute_query(query)
+        except Exception as e:
+            return None
+
+
+# ========================================================================
+# REPORT GENERATOR MODULE
+# ========================================================================
+
+class ReportGenerator:
+    """Generate reports in CSV and PDF formats with audit compliance"""
+    
+    OUTPUT_DIR = "../reports"
+    
+    @classmethod
+    def ensure_output_dir(cls):
+        """Create output directory if it doesn't exist"""
+        os.makedirs(cls.OUTPUT_DIR, exist_ok=True)
+    
+    @classmethod
+    def generate_document_id(cls):
+        """Generate unique audit-compliant document ID"""
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        unique = str(uuid.uuid4())[:8].upper()
+        return f"DOC-{timestamp}-{unique}"
+    
+    @classmethod
+    def generate_verification_code(cls, student_id, student_num, timestamp):
+        """Generate tamper-evident verification code"""
+        data = f"{student_id}{student_num}{timestamp}OFFICIAL".encode()
+        return hashlib.sha256(data).hexdigest()[:16].upper()
+    
+    @classmethod
+    def get_validity_period(cls):
+        """Return report validity dates"""
+        issued = datetime.now()
+        expires = issued + timedelta(days=365)
+        return issued, expires
+    
+    @classmethod
+    def convert_to_4point0_scale(cls, percentage_grade):
+        """
+        Convert percentage grade (0-100) to 4.0 GPA scale
+        A: 90-100 → 4.0
+        B: 80-89 → 3.0
+        C: 70-79 → 2.0
+        D: 60-69 → 1.0
+        F: 0-59 → 0.0
+        """
+        if percentage_grade is None:
+            return 0.0
+        
+        grade = float(percentage_grade)
+        if grade >= 90:
+            return 4.0
+        elif grade >= 80:
+            return 3.0
+        elif grade >= 70:
+            return 2.0
+        elif grade >= 60:
+            return 1.0
+        else:
+            return 0.0
+    
+    @classmethod
+    def generate_student_transcript_csv(cls, student_id):
+        """Generate student transcript as CSV"""
+        try:
+            cls.ensure_output_dir()
+            
+            # Get student info
+            student = StudentOperations.get_student_by_id(student_id)
+            if not student:
+                return False, "Student not found"
+            
+            student_id, student_num, first_name, last_name, dob, email, status = student
+            
+            # Get transcript
+            transcript = GradeOperations.get_student_transcript(student_id)
+            if not transcript:
+                return False, "No transcript data found"
+            
+            # Create filename
+            filename = f"transcript_{student_num}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            filepath = os.path.join(cls.OUTPUT_DIR, filename)
+            
+            # Write CSV
+            with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # Header with student info
+                writer.writerow(['STUDENT TRANSCRIPT'])
+                writer.writerow([])
+                writer.writerow(['Student Number:', student_num])
+                writer.writerow(['Name:', f"{first_name} {last_name}"])
+                writer.writerow(['Email:', email])
+                writer.writerow(['Status:', status])
+                writer.writerow([])
+                
+                # Transcript data
+                writer.writerow(['Student ID', 'Student Number', 'First Name', 'Last Name', 
+                                'Course Code', 'Course Name', 'Academic Year', 'Term', 'Average Grade'])
+                
+                for row in transcript:
+                    writer.writerow(row)
+            
+            return True, f"Transcript saved to {filepath}"
+        
+        except Exception as e:
+            return False, f"Error generating transcript: {str(e)}"
+    
+    @classmethod
+    def generate_course_statistics_csv(cls):
+        """Generate course grade statistics as CSV"""
+        try:
+            cls.ensure_output_dir()
+            
+            stats = ReportOperations.get_course_grade_statistics()
+            if not stats:
+                return False, "No statistics data found"
+            
+            filename = f"course_statistics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            filepath = os.path.join(cls.OUTPUT_DIR, filename)
+            
+            with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                writer.writerow(['COURSE GRADE STATISTICS'])
+                writer.writerow([])
+                writer.writerow(['Course Code', 'Course Name', 'Total Students', 'Total Grades',
+                                'Average Grade', 'Highest Grade', 'Lowest Grade'])
+                
+                for row in stats:
+                    writer.writerow(row)
+            
+            return True, f"Statistics saved to {filepath}"
+        
+        except Exception as e:
+            return False, f"Error generating statistics: {str(e)}"
+    
+    @classmethod
+    def generate_enrollment_statistics_csv(cls):
+        """Generate enrollment statistics as CSV"""
+        try:
+            cls.ensure_output_dir()
+            
+            stats = ReportOperations.get_enrollment_statistics()
+            if not stats:
+                return False, "No enrollment data found"
+            
+            filename = f"enrollment_statistics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            filepath = os.path.join(cls.OUTPUT_DIR, filename)
+            
+            with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                writer.writerow(['ENROLLMENT STATISTICS'])
+                writer.writerow([])
+                writer.writerow(['Course Code', 'Course Name', 'Total Enrollments',
+                                'Unique Students', 'Students with Grades'])
+                
+                for row in stats:
+                    writer.writerow(row)
+            
+            return True, f"Enrollment statistics saved to {filepath}"
+        
+        except Exception as e:
+            return False, f"Error generating enrollment statistics: {str(e)}"
+    
+    @classmethod
+    def generate_low_attendance_csv(cls):
+        """Generate low attendance report as CSV"""
+        try:
+            cls.ensure_output_dir()
+            
+            students = ReportOperations.get_low_attendance_students()
+            if not students:
+                return True, "No students with low attendance"
+            
+            filename = f"low_attendance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            filepath = os.path.join(cls.OUTPUT_DIR, filename)
+            
+            with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                writer.writerow(['LOW ATTENDANCE STUDENTS (<75%)'])
+                writer.writerow([])
+                writer.writerow(['Student Number', 'First Name', 'Last Name', 'Course Code',
+                                'Total Classes', 'Classes Attended', 'Attendance Percentage'])
+                
+                for row in students:
+                    writer.writerow(row)
+            
+            return True, f"Low attendance report saved to {filepath}"
+        
+        except Exception as e:
+            return False, f"Error generating low attendance report: {str(e)}"
+    
+    @classmethod
+    def generate_top_students_csv(cls, limit=10):
+        """Generate top students by GPA report as CSV"""
+        try:
+            cls.ensure_output_dir()
+            
+            students = ReportOperations.get_top_students_by_gpa(limit)
+            if not students:
+                return False, "No student data found"
+            
+            filename = f"top_students_{limit}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            filepath = os.path.join(cls.OUTPUT_DIR, filename)
+            
+            with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                writer.writerow([f'TOP {limit} STUDENTS BY GPA'])
+                writer.writerow([])
+                writer.writerow(['Rank', 'Student Number', 'First Name', 'Last Name', 'GPA', 'Total Grades'])
+                
+                for row in students:
+                    writer.writerow(row)
+            
+            return True, f"Top students report saved to {filepath}"
+        
+        except Exception as e:
+            return False, f"Error generating top students report: {str(e)}"
+    
+    @classmethod
+    def generate_student_transcript_pdf(cls, student_id):
+        """Generate audit-compliant student transcript PDF for official academic records"""
+        if not REPORTLAB_AVAILABLE:
+            return False, "ReportLab not installed. Install with: pip install reportlab"
+        
+        try:
+            cls.ensure_output_dir()
+            
+            # Get student info
+            student = StudentOperations.get_student_by_id(student_id)
+            if not student:
+                return False, "Student not found"
+            
+            student_id, student_num, first_name, last_name, dob, email, status = student
+            
+            # Get transcript from database view
+            query = f"SELECT * FROM vw_student_transcripts WHERE student_id = {student_id};"
+            transcript = DatabaseConnection.execute_query(query)
+            
+            if not transcript:
+                return False, "No transcript data found"
+            
+            # Generate audit compliance identifiers
+            document_id = cls.generate_document_id()
+            issued_date, expires_date = cls.get_validity_period()
+            verification_code = cls.generate_verification_code(student_id, student_num, issued_date.strftime('%Y%m%d'))
+            
+            # Create PDF filename with document ID
+            filename = f"transcript_{student_num}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            filepath = os.path.join(cls.OUTPUT_DIR, filename)
+            
+            # Create PDF with audit-compliant margins
+            doc = SimpleDocTemplate(filepath, pagesize=letter, 
+                                   leftMargin=0.75*inch, rightMargin=0.75*inch,
+                                   topMargin=0.5*inch, bottomMargin=1*inch)
+            story = []
+            styles = getSampleStyleSheet()
+            
+            # ========== OFFICIAL INSTITUTION HEADER ==========
+            header_style = ParagraphStyle(
+                'HeaderStyle',
+                parent=styles['Normal'],
+                fontSize=11,
+                textColor=colors.HexColor('#1f4788'),
+                alignment=1,
+                spaceAfter=2,
+                fontName='Helvetica-Bold'
+            )
+            subheader_style = ParagraphStyle(
+                'SubHeaderStyle',
+                parent=styles['Normal'],
+                fontSize=8,
+                textColor=colors.HexColor('#666666'),
+                alignment=1,
+                spaceAfter=1
+            )
+            
+            story.append(Paragraph(INSTITUTION_INFO['name'], header_style))
+            story.append(Paragraph(INSTITUTION_INFO['address'], subheader_style))
+            story.append(Paragraph(f"Phone: {INSTITUTION_INFO['phone']} | Email: {INSTITUTION_INFO['email']}", subheader_style))
+            story.append(Paragraph(f"Accreditation: {INSTITUTION_INFO['accreditation']}", subheader_style))
+            story.append(Spacer(1, 0.2*inch))
+            
+            # ========== OFFICIAL TITLE ==========
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=26,
+                textColor=colors.HexColor('#1f4788'),
+                spaceAfter=12,
+                alignment=1,
+                fontName='Helvetica-Bold'
+            )
+            story.append(Paragraph('OFFICIAL ACADEMIC TRANSCRIPT', title_style))
+            
+            # ========== AUDIT COMPLIANCE SECTION ==========
+            compliance_style = ParagraphStyle(
+                'ComplianceStyle',
+                parent=styles['Normal'],
+                fontSize=8,
+                textColor=colors.HexColor('#CC0000'),
+                alignment=1,
+                spaceAfter=6
+            )
+            story.append(Paragraph("This is an official academic record. Unauthorized reproduction or alteration is prohibited.", compliance_style))
+            
+            # ========== DOCUMENT IDENTIFIERS (Audit Trail) ==========
+            audit_data = [
+                ['Document ID:', document_id, 'Issued:', issued_date.strftime('%B %d, %Y')],
+                ['Verification Code:', verification_code, 'Valid Until:', expires_date.strftime('%B %d, %Y')]
+            ]
+            
+            audit_table = Table(audit_data, colWidths=[1.3*inch, 1.7*inch, 1.3*inch, 1.7*inch])
+            audit_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f0f0f0')),
+                ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#1f4788')),
+                ('TEXTCOLOR', (2, 0), (2, -1), colors.HexColor('#1f4788')),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, -1), 'Courier'),
+                ('FONTNAME', (3, 0), (3, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc'))
+            ]))
+            
+            story.append(audit_table)
+            story.append(Spacer(1, 0.2*inch))
+            
+            # ========== STUDENT INFORMATION SECTION ==========
+            student_info_data = [
+                ['Student Number:', str(student_num), 'Legal Name:', f"{first_name} {last_name}"],
+                ['Date of Birth:', str(dob), 'Enrollment Status:', status.upper()],
+                ['Email Address:', email, 'Record Last Updated:', datetime.now().strftime('%Y-%m-%d')]
+            ]
+            
+            student_info_table = Table(student_info_data, colWidths=[1.2*inch, 1.8*inch, 1.2*inch, 1.8*inch])
+            student_info_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#333333')),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                ('FONTNAME', (3, 0), (3, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc')),
+                ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.HexColor('#ffffff'), colors.HexColor('#f9f9f9')])
+            ]))
+            
+            story.append(student_info_table)
+            story.append(Spacer(1, 0.2*inch))
+            
+            # ========== ACADEMIC RECORD HEADER ==========
+            record_header = ParagraphStyle(
+                'RecordHeader',
+                parent=styles['Heading2'],
+                fontSize=12,
+                textColor=colors.HexColor('#1f4788'),
+                spaceAfter=10,
+                fontName='Helvetica-Bold',
+                borderPadding=5
+            )
+            story.append(Paragraph('ACADEMIC RECORD - OFFICIAL COURSES AND GRADES', record_header))
+            
+            # ========== TRANSCRIPT TABLE ==========
+            table_data = [['Course Code', 'Course Name', 'Academic Year', 'Term', 'Grade', 'Status']]
+            
+            for row in transcript:
+                course_code = row[4]
+                course_name = row[5][:28]
+                academic_year = row[6]
+                term = f"Term {row[7]}"
+                avg_grade = f"{float(row[8]):.2f}" if row[8] else 'N/A'
+                status_val = "PASSED" if row[8] and float(row[8]) >= 60 else "AUDIT" if row[8] else "PENDING"
+                
+                table_data.append([course_code, course_name, academic_year, term, avg_grade, status_val])
+            
+            table = Table(table_data, colWidths=[1*inch, 2.1*inch, 1*inch, 0.75*inch, 0.9*inch, 0.9*inch])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f4788')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('ALIGNMENT', (0, 0), (-1, 0), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#fafafa')),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.HexColor('#333333')),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('ALIGNMENT', (0, 1), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 1), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 1), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1.2, colors.HexColor('#1f4788')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#ffffff'), colors.HexColor('#f0f7ff')])
+            ]))
+            
+            story.append(table)
+            story.append(Spacer(1, 0.3*inch))
+            
+            # ========== OFFICIAL CERTIFICATION & FOOTER ==========
+            certification_style = ParagraphStyle(
+                'CertificationStyle',
+                parent=styles['Normal'],
+                fontSize=9,
+                textColor=colors.HexColor('#1f4788'),
+                fontName='Helvetica-Bold',
+                spaceAfter=4,
+                alignment=0
+            )
+            
+            normal_style = ParagraphStyle(
+                'NormalStyle',
+                parent=styles['Normal'],
+                fontSize=8,
+                textColor=colors.HexColor('#333333'),
+                alignment=0,
+                spaceAfter=2
+            )
+            
+            story.append(Paragraph('CERTIFICATION:', certification_style))
+            story.append(Paragraph('This official academic transcript is a complete and accurate record of the academic progress and achievements of the named student. This document is prepared in accordance with institutional policies and federal regulations governing educational records.', normal_style))
+            story.append(Spacer(1, 0.15*inch))
+            
+            story.append(Paragraph('CONFIDENTIALITY NOTICE:', certification_style))
+            story.append(Paragraph('This document contains confidential educational records protected under FERPA (Family Educational Rights and Privacy Act). Unauthorized access, use, or distribution is prohibited by federal law.', normal_style))
+            story.append(Spacer(1, 0.2*inch))
+            
+            # ========== OFFICIAL FOOTER ==========
+            footer_style = ParagraphStyle(
+                'FooterStyle',
+                parent=styles['Normal'],
+                fontSize=7,
+                textColor=colors.HexColor('#999999'),
+                alignment=1,
+                spaceAfter=1
+            )
+            
+            story.append(Paragraph("═" * 80, footer_style))
+            story.append(Paragraph(f"Verification Code: {verification_code}", footer_style))
+            story.append(Paragraph(f"Generated: {issued_date.strftime('%B %d, %Y at %H:%M:%S')} | Valid Until: {expires_date.strftime('%B %d, %Y')}", footer_style))
+            story.append(Paragraph(f"Contact: {INSTITUTION_INFO['email']} | {INSTITUTION_INFO['phone']}", footer_style))
+            story.append(Paragraph("═" * 80, footer_style))
+            
+            # Build PDF
+            doc.build(story)
+            
+            return True, f"Official transcript PDF saved to {filepath}"
+        
+        except Exception as e:
+            return False, f"Error generating PDF: {str(e)}"
+
+
+
     """
     Convert percentage grade (0-100) to 4.0 GPA scale
     A: 90-100 → 4.0
@@ -182,7 +1289,7 @@ class StudentRecordsApp:
                 print("\n\n  ⚠️  Operation cancelled by user")
                 return None
             except Exception as e:
-                log_error("Error in get_input", exception=e)
+                pass
                 print(f"  ❌ An unexpected error occurred: {str(e)}")
                 continue
     
@@ -325,15 +1432,15 @@ class StudentRecordsApp:
                 success, message, student_id = result
                 print(f"\n{'✅' if success else '❌'} {message}")
                 if success:
-                    log_info(f"Student added: {first_name} {last_name} (ID: {student_id})")
+                    pass
             else:
                 success, message = result
                 print(f"\n{'✅' if success else '❌'} {message}")
                 if success:
-                    log_info(f"Student added: {first_name} {last_name}")
+                    pass
         
         except Exception as e:
-            log_error("Error in add_student", exception=e)
+            pass
             print(f"\n  ❌ An unexpected error occurred: {str(e)}")
     
     
@@ -374,13 +1481,13 @@ class StudentRecordsApp:
                 headers = ["ID", "Num", "First Name", "Last Name", "DOB", "Email", "Status"]
                 print(f"  Found {len(students)} student(s):\n")
                 self.print_table(headers, students)
-                log_info(f"Search completed: '{search_term}' found {len(students)} results")
+                pass
             else:
                 print(f"  ❌ No students found matching '{search_term}'\n")
-                log_info(f"Search completed: '{search_term}' found 0 results")
+                pass
         
         except Exception as e:
-            log_error("Error in search_students", exception=e, context=f"search_term={search_term}")
+            pass
             print(f"  ❌ Error during search: {str(e)}\n")
     
     def view_all_students_paginated(self):
@@ -435,12 +1542,12 @@ class StudentRecordsApp:
                     print("\n\n  ⚠️  Navigation cancelled\n")
                     break
                 except Exception as e:
-                    log_error("Error in pagination loop", exception=e)
+                    pass
                     print(f"  ❌ Error: {str(e)}\n")
                     break
         
         except Exception as e:
-            log_error("Error in view_all_students_paginated", exception=e)
+            pass
             print(f"  ❌ Error retrieving students: {str(e)}\n")
     
     def view_student_details(self):
@@ -456,7 +1563,7 @@ class StudentRecordsApp:
             
             if not student:
                 print(f"  ❌ Student with ID {student_id} not found\n")
-                log_info(f"Student search: ID {student_id} not found")
+                pass
                 return
             
             print("\n  " + "="*64)
@@ -467,10 +1574,10 @@ class StudentRecordsApp:
             print(f"  Email:              {student[5]}")
             print(f"  Status:             {student[6]}")
             print("  " + "="*64 + "\n")
-            log_info(f"Student details viewed: ID {student_id}")
+            pass
         
         except Exception as e:
-            log_error("Error in view_student_details", exception=e)
+            pass
             print(f"  ❌ Error retrieving student details: {str(e)}\n")
     
     def update_student_status(self):
@@ -608,7 +1715,7 @@ class StudentRecordsApp:
             student = StudentOperations.get_student_by_id(student_id)
             if not student:
                 print(f"  ❌ Student with ID {student_id} not found\n")
-                log_info(f"Enrollment: Student {student_id} not found")
+                pass
                 return
             print(f"  ✅ Student found: {student[2]} {student[3]}")
             
@@ -620,7 +1727,7 @@ class StudentRecordsApp:
             course = CourseOperations.get_course_by_id(course_id)
             if not course:
                 print(f"  ❌ Course with ID {course_id} not found\n")
-                log_info(f"Enrollment: Course {course_id} not found")
+                pass
                 return
             print(f"  ✅ Course found: {course[1]}")
             
@@ -650,10 +1757,10 @@ class StudentRecordsApp:
             )
             print(f"\n  {'✅' if success else '❌'} {message}\n")
             if success:
-                log_operation("add_enrollment", "success", f"Student {student_id}, Course {course_id}")
+                pass
         
         except Exception as e:
-            log_error("Error in add_enrollment", exception=e)
+            pass
             print(f"\n  ❌ Error: {str(e)}\n")
     
     def view_all_enrollments_paginated(self):
@@ -708,12 +1815,12 @@ class StudentRecordsApp:
                     print("\n\n  ⚠️  Navigation cancelled\n")
                     break
                 except Exception as e:
-                    log_error("Error in enrollment pagination loop", exception=e)
+                    pass
                     print(f"  ❌ Error: {str(e)}\n")
                     break
         
         except Exception as e:
-            log_error("Error in view_all_enrollments_paginated", exception=e)
+            pass
             print(f"  ❌ Error retrieving enrollments: {str(e)}\n")
     
     def search_enrollments(self):
@@ -753,13 +1860,13 @@ class StudentRecordsApp:
                 headers = ["Enroll ID", "Student ID", "Course ID", "Year", "Term", "Date"]
                 print(f"\n  Found {len(results)} enrollment(s) for {search_label}:\n")
                 self.print_table(headers, results)
-                log_info(f"Enrollment search: {search_label} found {len(results)} results")
+                pass
             else:
                 print(f"  ❌ No enrollments found for {search_label}\n")
-                log_info(f"Enrollment search: {search_label} found 0 results")
+                pass
         
         except Exception as e:
-            log_error("Error in search_enrollments", exception=e)
+            pass
             print(f"  ❌ Error during search: {str(e)}\n")
     
     def delete_enrollment(self):

@@ -281,12 +281,14 @@ The project follows a phased, end-to-end data engineering approach aligned with 
 - **TECHNICAL_REPORT_CONDENSED.md** - Technical architecture and implementation details
 
 ### Python Files (`python/` directory)
-**CLI Application (5 files):**
-- `app.py` - Menu-driven CLI interface (1000+ lines)
-- `operations.py` - Business logic layer for all operations
-- `database.py` - Database connection management
-- `validators.py` - Input validation module (50+ validation methods)
-- `report_generator.py` - Report generation (CSV & PDF export)
+**CLI Application (Consolidated):**
+- `app.py` - Complete single-file CLI application (2500+ lines)
+  - DatabaseConnection: Singleton database connection manager
+  - Validators: 12 validator classes with 50+ validation methods
+  - Operations: Student, Course, Enrollment, Grade, Attendance, Report operations
+  - ReportGenerator: CSV and PDF report generation
+  - StudentRecordsApp: Main CLI interface with CRUD, search, pagination, sorting
+  - PaginationManager: Pagination system for large datasets
 
 **ETL Pipeline (2 files):**
 - `etl_pipeline.py` - ETL pipeline for data extraction and loading
@@ -414,8 +416,8 @@ cp python/db_config.example.py python/db_config.py
 python python/generate_sample_data.py
 python python/etl_pipeline.py
 
-# Setup database views and procedures
-python python/setup_database.py
+# Run database setup (create views and procedures)
+# Execute sql/queries_and_procedures.sql in your PostgreSQL client
 
 # Launch CLI application
 python python/app.py
