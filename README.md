@@ -272,16 +272,47 @@ The project follows a phased, end-to-end data engineering approach aligned with 
 
 - **Status:** Enhanced CLI fully functional, PDF export tested ✓ (Commit: be9e769)
 
-## Documentation Files
+## Repository Structure
 
-### Included in Repository (Pushed to GitHub)
+### Documentation Files
 - **README.md** - Project overview, features, and quick start guide
 - **REFLECTIONS.md** - Learning insights and project retrospective
 - **TESTING_REPORT.md** - Comprehensive test suite documentation and results
 - **TECHNICAL_REPORT_CONDENSED.md** - Technical architecture and implementation details
 
+### Python Files (`python/` directory)
+**Core Application:**
+- `app.py` - Menu-driven CLI interface (1000+ lines)
+- `operations.py` - Business logic layer for all operations
+- `database.py` - Database connection management
+- `validators.py` - Input validation for all data types
+- `report_generator.py` - CSV and PDF report generation
+
+**ETL & Data:**
+- `etl_pipeline.py` - ETL pipeline for data extraction and loading
+- `generate_sample_data.py` - Sample data generation using Faker
+
+**Configuration:**
+- `db_config.example.py` - Example database configuration template
+- `db_config.py` - Database credentials (not pushed to GitHub)
+
+**Testing:**
+- `test_validators.py` - 53 unit tests for validation logic
+- `test_data_quality.py` - 22 data quality constraint tests
+
+### SQL Files (`sql/` directory)
+- `Creating tables.sql` - Database schema creation (5 normalized tables)
+- `queries_and_procedures.sql` - Views, functions, and stored procedures
+
+### Data Files (`data/` directory)
+- `students.csv` - Student records
+- `courses.csv` - Course catalog
+- `enrollments.csv` - Student-course enrollment data
+- `grades.csv` - Grade records
+- `attendance.csv` - Attendance tracking records
+
 ### Local Documentation (Not Pushed)
-The following documentation files are kept locally in the parent directory for reference but are not included in the GitHub repository:
+Files kept locally in parent directory for reference:
 - DELIVERABLES_COMPLETE.md
 - ENHANCEMENTS_COMPLETE.md
 - ERD_DIAGRAM.md
@@ -289,7 +320,6 @@ The following documentation files are kept locally in the parent directory for r
 - README_SUBMISSION.md
 - SUBMISSION_CHECKLIST.md
 - SUBMISSION_SUMMARY.md
-- (Plus other documentation files in parent DATA PROJECT 1 directory)
 
 ## Tech Stack
 - **Database:** PostgreSQL 12+ (16+ recommended)
