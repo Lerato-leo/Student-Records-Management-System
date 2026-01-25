@@ -281,14 +281,16 @@ The project follows a phased, end-to-end data engineering approach aligned with 
 - **TECHNICAL_REPORT_CONDENSED.md** - Technical architecture and implementation details
 
 ### Python Files (`python/` directory)
-**CLI Application (Consolidated):**
-- `app.py` - Complete single-file CLI application (2500+ lines)
+**CLI Application:**
+- `app.py` - Complete CLI application (2300+ lines) with:
   - DatabaseConnection: Singleton database connection manager
-  - Validators: 12 validator classes with 50+ validation methods
-  - Operations: Student, Course, Enrollment, Grade, Attendance, Report operations
-  - ReportGenerator: CSV and PDF report generation
+  - StudentOperations, CourseOperations, EnrollmentOperations, GradeOperations, AttendanceOperations, ReportOperations
+  - ReportGenerator: CSV and PDF report generation with audit compliance
   - StudentRecordsApp: Main CLI interface with CRUD, search, pagination, sorting
   - PaginationManager: Pagination system for large datasets
+- `validators.py` - Input validation module (160+ lines) with:
+  - Validators class with 15+ validation methods
+  - Validates: student numbers, emails, names, dates, academic years, terms, grades, attendance, status
 
 **ETL Pipeline (2 files):**
 - `etl_pipeline.py` - ETL pipeline for data extraction and loading
