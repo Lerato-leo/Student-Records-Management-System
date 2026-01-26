@@ -547,6 +547,25 @@ class ReportGenerator:
             return 0.0
     
     @classmethod
+    def determine_course_status(cls, gpa):
+        """
+        Determine course status based on GPA:
+        - PASS: 50%+ (≥50)
+        - QUALIFY FOR REASSESSMENT: 40-49% (40-49)
+        - FAIL: ≤39%
+        """
+        if gpa is None:
+            return "PENDING"
+        
+        grade = float(gpa)
+        if grade >= 50:
+            return "PASS"
+        elif grade >= 40:
+            return "QUALIFY FOR REASSESSMENT"
+        else:
+            return "FAIL"
+    
+    @classmethod
     def generate_student_transcript_csv(cls, student_id):
         """Generate student transcript as CSV"""
         try:
@@ -873,7 +892,7 @@ class ReportGenerator:
                 academic_year = row[6]
                 term = f"Term {row[7]}"
                 avg_grade = f"{float(row[8]):.2f}" if row[8] else 'N/A'
-                status_val = "PASSED" if row[8] and float(row[8]) >= 60 else "AUDIT" if row[8] else "PENDING"
+                status_val = cls.determine_course_status(row[8])
                 
                 table_data.append([course_code, course_name, academic_year, term, avg_grade, status_val])
             
